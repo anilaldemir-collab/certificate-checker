@@ -224,8 +224,8 @@ with tab2:
     if not api_key:
         st.warning("⚠️ Konsey Modu için API Anahtarı şarttır.")
     else:
-        st.success("✅ Konsey Toplandı: Etiketi yüklediğiniz an 3 uzman değerlendirecek.")
-        uploaded_file = st.file_uploader("Eldiven Etiketini Yükle", type=["jpg", "png", "jpeg"])
+        st.success("✅ Konsey Toplandı: Etiketin veya Eldivenin fotoğrafını yükleyin.")
+        uploaded_file = st.file_uploader("Eldiven veya Etiket Fotoğrafı Yükle", type=["jpg", "png", "jpeg"])
 
         if uploaded_file and st.button("🤖 Konseyi Topla ve Analiz Et"):
             img = Image.open(uploaded_file)
@@ -234,24 +234,35 @@ with tab2:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("### 📜 Mevzuatçı")
-                with st.spinner("Etiket kodları okunuyor..."):
-                    resp = ask_ai_persona(api_key, "Gümrük Denetçisi", 
-                        "Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?", img)
+                st.markdown("### 📜 Mevzuatçı (Marka/Model Tespiti)")
+                with st.spinner("Görsel taranıyor..."):
+                    prompt_regulation = """
+                    1. Fotoğrafta bir etiket varsa EN 13594, CE kodlarını oku.
+                    2. EĞER ETİKET YOKSA: Eldivenin tasarımından Marka ve Modelini görsel olarak tespit et (Örn: "Bu tasarım Revit Sand 4 modeline benziyor").
+                    3. Tespit ettiğin bu modelin yasal olarak sertifikalı olup olmadığını bilgi bankandan kontrol et.
+                    """
+                    resp = ask_ai_persona(api_key, "Gümrük ve Sertifikasyon Denetçisi", prompt_regulation, img)
                     st.info(resp)
             
             with col2:
-                st.markdown("### 🛠️ Mühendis")
-                with st.spinner("Dikiş ve malzeme inceleniyor..."):
-                    resp = ask_ai_persona(api_key, "Güvenlik Ekipmanı Mühendisi", 
-                        "Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı?", img)
+                st.markdown("### 🛠️ Mühendis (Yapısal Analiz)")
+                with st.spinner("Malzeme inceleniyor..."):
+                    prompt_engineer = """
+                    Fotoğraftaki ürünün (veya tespit ettiğin modelin) malzeme kalitesini (deri, tekstil, file) ve koruma parçalarını incele.
+                    Bu yapı, EN 13594 standartlarını karşılayacak kadar güvenli duruyor mu? Dikişler ve korumalar sağlam mı?
+                    """
+                    resp = ask_ai_persona(api_key, "Güvenlik Ekipmanı Mühendisi", prompt_engineer, img)
                     st.warning(resp)
             
             with col3:
-                st.markdown("### 🕵️ Dedektif")
-                with st.spinner("Sahtecilik kontrolü..."):
-                    resp = ask_ai_persona(api_key, "Sahte Ürün Uzmanı", 
-                        "Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz?", img)
+                st.markdown("### 🕵️ Dedektif (Sahtecilik & Geçmiş)")
+                with st.spinner("Piyasa araştırması..."):
+                    prompt_detective = """
+                    1. Bu ürünün marka/modelini görselden kesin olarak tanımaya çalış.
+                    2. Bu modelin piyasada 'replikası' (sahtesi) yaygın mı? Fotoğraftaki ürün orijinal mi duruyor yoksa replika emareleri (dikiş hatası, font kayması) var mı?
+                    3. İnternet hafızanda bu modelle ilgili bilinen bir güvenlik şikayeti var mı?
+                    """
+                    resp = ask_ai_persona(api_key, "Sahte Ürün ve Piyasa Uzmanı", prompt_detective, img)
                     st.error(resp)
             
             st.success("✅ **Konsey Kararı:** Üç görüşü okuyarak nihai kararınızı verin.")
