@@ -152,12 +152,28 @@ with tab1:
             st.info("💡 **İpucu:** 4. butona tıklayıp Görsellerde gezinin. Genellikle sertifika kağıdının fotoğrafını çeken kullanıcıları orada bulursunuz.")
 
             # ---------------------------
-            # 3. ADIM: Türkiye Pazarı
+            # 3. ADIM: Türkiye Pazarı ve Yorumlar
             # ---------------------------
             st.write("---")
-            st.markdown("### 3. 🇹🇷 Satıcı Beyanları")
-            tr_query = f'site:trendyol.com OR site:hepsiburada.com "{full_name}" "EN 13594"'
-            st.link_button("👉 Trendyol/Hepsiburada Yorumlarını Ara", create_google_link(tr_query))
+            st.markdown("### 3. 🇹🇷 Türkiye Pazar Yeri Yorumları")
+            st.caption("Trendyol, Hepsiburada vb. sitelerdeki kullanıcı yorum özetleri:")
+            
+            # Pazar yerlerinde yorum araması yap
+            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}" yorum'
+            results_tr, errors = search_ddg(tr_query, max_res=5)
+            
+            if results_tr:
+                # Bulunan sonuçları (yorum snippetlerini) ekrana yazdır
+                with st.expander("💬 Kullanıcı Yorum Özetlerini Gör", expanded=True):
+                    for res in results_tr:
+                        # Başlık ve özet (body) göster
+                        st.markdown(f"**{res.get('title')}**")
+                        st.caption(f"...{res.get('body')}...")
+                        st.markdown(f"[🔗 Kaynağa Git]({res.get('href')})")
+                        st.divider()
+            else:
+                st.info("Bu ürün için pazar yerlerinde öne çıkan bir yorum indeksi bulunamadı.")
+                st.link_button("👉 Manuel Olarak Trendyol/Hepsiburada'da Ara", create_google_link(tr_query))
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
@@ -174,8 +190,4 @@ with tab2:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     img = Image.open(uploaded_file)
-                    prompt = "Bu motosiklet eldiveni etiketini analiz et. EN 13594 var mı? Level 1 mi 2 mi? KP var mı? Ürün markası bilinmedik olsa bile etiketi güvenli duruyor mu? Türkçe özetle."
-                    response = model.generate_content([prompt, img])
-                    st.write(response.text)
-                except Exception as e:
-                    st.error(f"Hata: {e}")
+                    prompt = "Bu motosiklet eldiveni etiketini analiz et. EN 13594 var mı? Level 1 mi 2 mi? KP var mı? Ürün markası bilinmedik olsa bile etiketi
