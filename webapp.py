@@ -152,46 +152,40 @@ with tab1:
             st.info("💡 **İpucu:** 4. butona tıklayıp Görsellerde gezinin. Genellikle sertifika kağıdının fotoğrafını çeken kullanıcıları orada bulursunuz.")
 
             # ---------------------------
-            # 3. ADIM: Türkiye Pazarı ve Yorumlar (FİLTRELİ)
+            # 3. ADIM: Türkiye Pazarı ve Yorumlar (GENİŞLETİLMİŞ)
             # ---------------------------
             st.write("---")
-            st.markdown("### 3. 🇹🇷 Türkiye Pazar Yeri Yorumları (Sertifika Odaklı)")
-            st.caption("Sadece 'EN 13594' veya 'CE Sertifikası' içeren yorumlar filtreleniyor:")
+            st.markdown("### 3. 🇹🇷 Türkiye Pazar Yeri Sonuçları")
+            st.caption("Filtreleme kaldırıldı. Bulunan tüm ilgili sonuçlar aşağıdadır:")
             
-            # Pazar yerlerinde geniş yorum araması yap (Daha fazla sonuç çekip filtreleyeceğiz)
-            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}" yorum'
-            results_tr, errors = search_ddg(tr_query, max_res=10)
-            
-            found_relevant_comment = False
+            # Pazar yerlerinde yorum araması yap (Daha fazla sonuç çekip filtreleyeceğiz)
+            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}"'
+            results_tr, errors = search_ddg(tr_query, max_res=8)
             
             if results_tr:
-                # Sadece ilgili anahtar kelimeleri içerenleri göster
-                relevant_keywords = ["en 13594", "13594", "ce sertifika", "ce belge", "ce onay", "koruma seviye"]
+                # Sadece ilgili anahtar kelimeleri içerenleri vurgula ama hepsini göster
+                relevant_keywords = ["en 13594", "13594", "ce sertifika", "ce belge", "ce onay", "koruma seviye", "sertifikalı"]
                 
-                # Filtrelenmiş sonuçları tutacak liste
-                filtered_results = []
-                for res in results_tr:
-                    content = (res.get('title', '') + " " + res.get('body', '')).lower()
-                    if any(kw in content for kw in relevant_keywords):
-                        filtered_results.append(res)
-                
-                if filtered_results:
-                    with st.expander("💬 Sertifika Hakkında Bulunan Yorumlar", expanded=True):
-                        for res in filtered_results:
-                            st.markdown(f"**{res.get('title')}**")
-                            # İçeriği biraz temizleyip gösterelim
-                            body_text = res.get('body', 'Özet yok')
-                            st.caption(f"...{body_text}...")
-                            st.markdown(f"[🔗 Yorumu Kaynağında Gör]({res.get('href')})")
-                            st.divider()
-                            found_relevant_comment = True
-                else:
-                    st.info("Yorumlarda 'EN 13594' veya 'CE Sertifikası' ile ilgili özel bir ifadeye rastlanmadı.")
+                with st.expander("💬 Bulunan Ürün Sayfaları ve Yorumlar", expanded=True):
+                    for res in results_tr:
+                        content = (res.get('title', '') + " " + res.get('body', '')).lower()
+                        
+                        # İkon belirleme
+                        icon = "🛒" # Standart ikon
+                        if any(kw in content for kw in relevant_keywords):
+                            icon = "✅ (Sertifika Bahsi Var)"
+                            st.success(f"**{icon} {res.get('title')}**") # Önemli olanı yeşil yap
+                        else:
+                            st.markdown(f"**{icon} {res.get('title')}**")
+
+                        # İçeriği göster
+                        body_text = res.get('body', 'Özet yok')
+                        st.caption(f"...{body_text}...")
+                        st.markdown(f"[🔗 Sayfaya Git]({res.get('href')})")
+                        st.divider()
             else:
-                st.info("Bu ürün için pazar yerlerinde indekslenmiş yorum bulunamadı.")
-            
-            if not found_relevant_comment:
-                st.link_button("👉 Tüm Yorumları Manuel Olarak Tara", create_google_link(tr_query))
+                st.info("Bu ürün için pazar yerlerinde indekslenmiş sonuç bulunamadı.")
+                st.link_button("👉 Manuel Olarak Trendyol/Hepsiburada'da Ara", create_google_link(tr_query))
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
