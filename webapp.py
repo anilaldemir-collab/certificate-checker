@@ -4,6 +4,7 @@ from PIL import Image
 import google.generativeai as genai
 import time
 import urllib.parse
+import random
 
 # -----------------------------------------------------------------------------
 # AYARLAR
@@ -27,18 +28,35 @@ def create_google_link(query):
     return f"https://www.google.com/search?q={encoded_query}"
 
 def search_ddg(query, max_res=3):
-    """DuckDuckGo araması yapar, hata verirse boş liste döner."""
-    try:
-        with DDGS() as ddgs:
-            return list(ddgs.text(query, max_results=max_res))
-    except:
-        return []
+    """
+    Güçlendirilmiş Arama: Standart yol engellenirse 'Lite' ve 'HTML' 
+    modlarını deneyerek engellemeyi aşmaya çalışır.
+    """
+    # DuckDuckGo'nun farklı giriş kapıları
+    backends = ['lite', 'html', 'api'] 
+    
+    for backend in backends:
+        try:
+            # Her denemede rastgele kısa bir bekleme yap (Robot yakalanmaması için)
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=max_res, backend=backend))
+                
+                # Eğer sonuç döndüyse hemen gönder
+                if results:
+                    return results
+        except Exception:
+            # Bu yöntem hata verdiyse (engellendiyse) diğer yönteme geç
+            continue
+            
+    return [] # Hiçbiri çalışmazsa boş dön
 
 # -----------------------------------------------------------------------------
 # ARAYÜZ
 # -----------------------------------------------------------------------------
 st.title("🛡️ Motosiklet Eldiveni Dedektifi")
-st.markdown("Otomatik tarama çalışmazsa, manuel butonlar devreye girer.")
+st.markdown("Güçlendirilmiş arama motoru ile güvenlik taraması.")
 
 tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 
@@ -56,6 +74,10 @@ with tab1:
         else:
             full_name = f"{brand} {model}"
             score = 0
+            
+            # Durum bildirme
+            status_text = st.empty()
+            status_text.info("🕵️ Robot korumaları aşılıyor ve taranıyor...")
             
             st.write("---")
             
@@ -105,6 +127,8 @@ with tab1:
             review_query = f"{full_name} motorcycle glove EN 13594 review"
             st.info("İncelemelerde 'EN 13594' standardı geçiyor mu?")
             st.markdown(f"[👉 Tıkla: İncelemeleri Google'da Gör]({create_google_link(review_query)})", unsafe_allow_html=True)
+            
+            status_text.empty() # Durum mesajını temizle
             
             # SONUÇ PUANI (Sadece otomatik bulunanlar üzerinden)
             if score > 0:
