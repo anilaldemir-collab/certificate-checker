@@ -27,36 +27,37 @@ def create_google_link(query):
     encoded_query = urllib.parse.quote(query)
     return f"https://www.google.com/search?q={encoded_query}"
 
+@st.cache_data(show_spinner=False)
 def search_ddg(query, max_res=3):
     """
     Güçlendirilmiş Arama: Standart yol engellenirse 'Lite' ve 'HTML' 
-    modlarını deneyerek engellemeyi aşmaya çalışır.
+    modlarını deneyerek engellemeyi aşmaya çalışır. Sonuçları önbelleğe alır.
     """
     # DuckDuckGo'nun farklı giriş kapıları
-    backends = ['lite', 'html', 'api'] 
+    backends = ['api', 'html', 'lite'] 
     
+    debug_errors = []
+
     for backend in backends:
         try:
-            # Her denemede rastgele kısa bir bekleme yap (Robot yakalanmaması için)
-            time.sleep(random.uniform(0.5, 1.5))
+            # Her denemede rastgele kısa bir bekleme yap
+            time.sleep(random.uniform(0.3, 1.0))
             
             with DDGS() as ddgs:
                 results = list(ddgs.text(query, max_results=max_res, backend=backend))
-                
-                # Eğer sonuç döndüyse hemen gönder
                 if results:
-                    return results
-        except Exception:
-            # Bu yöntem hata verdiyse (engellendiyse) diğer yönteme geç
+                    return results, None
+        except Exception as e:
+            debug_errors.append(f"{backend} modu hatası: {str(e)}")
             continue
             
-    return [] # Hiçbiri çalışmazsa boş dön
+    return [], debug_errors # Hiçbiri çalışmazsa boş dön ve hataları raporla
 
 # -----------------------------------------------------------------------------
 # ARAYÜZ
 # -----------------------------------------------------------------------------
 st.title("🛡️ Motosiklet Eldiveni Dedektifi")
-st.markdown("Güçlendirilmiş arama motoru ile güvenlik taraması.")
+st.markdown("Otomatik tarama çalışmazsa, **Manuel Doğrulama Butonları** devreye girer.")
 
 tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 
@@ -76,15 +77,15 @@ with tab1:
             score = 0
             
             # Durum bildirme
-            status_text = st.empty()
-            status_text.info("🕵️ Robot korumaları aşılıyor ve taranıyor...")
+            status_container = st.status("🕵️ İnternet taranıyor...", expanded=True)
             
-            st.write("---")
-            
+            # ---------------------------
             # 1. ADIM: MotoCAP
+            # ---------------------------
+            st.write("---")
             st.markdown("### 1. 🧪 MotoCAP Laboratuvar Testi")
             motocap_query = f"site:motocap.com.au {full_name}"
-            results = search_ddg(motocap_query)
+            results, errors = search_ddg(motocap_query)
             
             found = False
             if results:
@@ -95,22 +96,30 @@ with tab1:
                         found = True
                         break
             
-            # Eğer otomatik bulamazsa manuel link ver
             if not found:
-                st.warning("⚠️ Otomatik taramada MotoCAP kaydı görünmedi.")
-                st.markdown(f"[👉 Tıkla: MotoCAP Sonuçlarını Kendin Gör]({create_google_link(motocap_query)})", unsafe_allow_html=True)
+                st.warning("⚠️ Otomatik taramada sonuç alınamadı (Sunucu engeli olabilir).")
+                # Manuel Buton
+                st.link_button(
+                    label="👉 Tıkla: MotoCAP Sonuçlarını Kendin Gör",
+                    url=create_google_link(motocap_query),
+                    type="secondary"
+                )
+                if errors:
+                    with st.expander("Teknik Detay (Hata Kodları)"):
+                        st.write(errors)
 
-            st.write("---")
-
+            # ---------------------------
             # 2. ADIM: PDF Belge
+            # ---------------------------
+            st.write("---")
             st.markdown("### 2. 📄 Resmi Sertifika Belgesi (PDF)")
             doc_query = f"{brand} {model} declaration of conformity filetype:pdf"
-            results = search_ddg(doc_query)
+            results, errors = search_ddg(doc_query)
             
             found_pdf = False
             if results:
                 for res in results:
-                    if res.get('href', '').endswith('.pdf'):
+                    if res.get('href', '').lower().endswith('.pdf'):
                         st.success(f"✅ **PDF Bulundu:** [{res.get('title')}]({res.get('href')})")
                         score += 40
                         found_pdf = True
@@ -118,23 +127,35 @@ with tab1:
             
             if not found_pdf:
                 st.warning("⚠️ Otomatik taramada PDF yakalanamadı.")
-                st.markdown(f"[👉 Tıkla: PDF Belgelerini Ara]({create_google_link(doc_query)})", unsafe_allow_html=True)
+                st.link_button(
+                    label="👉 Tıkla: Resmi PDF Belgelerini Ara",
+                    url=create_google_link(doc_query),
+                    type="secondary"
+                )
 
-            st.write("---")
-
+            # ---------------------------
             # 3. ADIM: Genel Kontrol
+            # ---------------------------
+            st.write("---")
             st.markdown("### 3. 🌍 Genel İnceleme")
             review_query = f"{full_name} motorcycle glove EN 13594 review"
             st.info("İncelemelerde 'EN 13594' standardı geçiyor mu?")
-            st.markdown(f"[👉 Tıkla: İncelemeleri Google'da Gör]({create_google_link(review_query)})", unsafe_allow_html=True)
+            st.link_button(
+                label="👉 Tıkla: İncelemeleri Google'da Gör",
+                url=create_google_link(review_query),
+                type="secondary"
+            )
             
-            status_text.empty() # Durum mesajını temizle
+            status_container.update(label="İşlem Tamamlandı", state="complete", expanded=False)
             
-            # SONUÇ PUANI (Sadece otomatik bulunanlar üzerinden)
+            # ---------------------------
+            # SONUÇ PUANI
+            # ---------------------------
+            st.divider()
             if score > 0:
                 st.success(f"**Otomatik Sistem Güven Skoru: {score}/100**")
             else:
-                st.info("**Otomatik skor hesaplanamadı. Lütfen yukarıdaki '👉 Tıkla' linklerini kullanarak manuel kontrol edin.**")
+                st.info("**Otomatik skor hesaplanamadı. Lütfen yukarıdaki '👉 Tıkla' butonlarını kullanarak doğrulayın.**")
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
