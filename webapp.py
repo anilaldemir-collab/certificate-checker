@@ -36,11 +36,9 @@ def search_ddg(query, max_res=3):
     return [], ["Bağlantı hatası"]
 
 def ask_ai_persona(api_key, persona, prompt, image=None):
-    """Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar."""
+    """Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar. Hata durumunda yedek modellere geçer."""
     try:
         genai.configure(api_key=api_key)
-        # MODEL İSMİ GÜNCELLENDİ: 'gemini-1.5-flash-001' daha kararlıdır.
-        model = genai.GenerativeModel('gemini-1.5-flash-001')
         
         full_prompt = f"""
         GÖREV: Sen '{persona}' rolünde bir uzmansın.
@@ -50,11 +48,27 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        if image:
-            response = model.generate_content([full_prompt, image])
-        else:
-            response = model.generate_content(full_prompt)
-        return response.text
+        # 1. Deneme: En güncel model (Gemini 1.5 Flash)
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            if image:
+                response = model.generate_content([full_prompt, image])
+            else:
+                response = model.generate_content(full_prompt)
+            return response.text
+            
+        except Exception:
+            # 2. Deneme: Eğer 1.5 Flash hata verirse (404 vs), kararlı eski modellere düş (Fallback)
+            if image:
+                # Görsel için eski vizyon modeli
+                fallback_model = genai.GenerativeModel('gemini-pro-vision')
+                response = fallback_model.generate_content([full_prompt, image])
+            else:
+                # Metin için eski pro modeli
+                fallback_model = genai.GenerativeModel('gemini-pro')
+                response = fallback_model.generate_content(full_prompt)
+            return response.text
+
     except Exception as e:
         return f"Hata: {str(e)}"
 
