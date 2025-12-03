@@ -65,6 +65,7 @@ with st.sidebar:
     
     if not api_key:
         st.info("ℹ️ Konsey Modu (3 Uzman) için API anahtarı gerekir.")
+        st.markdown("[👉 Ücretsiz API Anahtarı Almak İçin Tıkla](https://aistudio.google.com/app/apikey)")
         user_key = st.text_input("Google API Key", type="password")
         if user_key:
             api_key = user_key
