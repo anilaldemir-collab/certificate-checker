@@ -33,7 +33,6 @@ def search_ddg(query, max_res=3):
     modlarını deneyerek engellemeyi aşmaya çalışır. Sonuçları önbelleğe alır.
     """
     backends = ['api', 'html', 'lite'] 
-    
     debug_errors = []
 
     for backend in backends:
@@ -61,11 +60,14 @@ with st.sidebar:
 
     st.divider()
     
-    st.header("🕵️ Derin Arama Modu")
+    st.header("💡 İpuçları")
     st.info("""
-    Otomatik aramalar Çinli sitelerde (Scoyco vb.) yetersiz kalabilir.
+    **Neden Yorumları Çekemiyoruz?**
+    Trendyol/Hepsiburada botları engeller. 
     
-    Bu durumda **'Derin Arama Linkleri'** bölümündeki butonları kullanın. Bu butonlar Google'ın özel komutlarını (filetype:pdf, site:...) kullanarak gizli dosyaları bulur.
+    **Yeni Çözüm:**
+    1. **Forum Taraması:** Kullanıcıların gerçek tartışmalarını bulur.
+    2. **AI Hafızası:** Google'ın yapay zekasına bu modelin geçmişini sorar.
     """)
     
     st.markdown("### 🔗 Hızlı Linkler")
@@ -76,9 +78,9 @@ with st.sidebar:
 # ARAYÜZ
 # -----------------------------------------------------------------------------
 st.title("🛡️ Motosiklet Eldiveni Dedektifi")
-st.markdown("Otomatik sonuç bulunamazsa **Derin Arama Butonları** devreye girer.")
+st.markdown("Otomatik tarama, **Forum Dedektifi** ve **AI Danışmanı** devrede.")
 
-tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
+tab1, tab2 = st.tabs(["🔍 İnternet & AI Taraması", "📷 Fotoğraf Analizi (Kesin Çözüm)"])
 
 # --- TAB 1: İNTERNET ARAMASI ---
 with tab1:
@@ -95,102 +97,82 @@ with tab1:
             full_name = f"{brand} {model}"
             score = 0
             
-            status_container = st.status("🕵️ İnternet taranıyor...", expanded=True)
+            # --- AI HAFIZA SORGUSU (YENİ) ---
+            if api_key:
+                with st.status("🧠 Yapay Zeka Hafızası Sorgulanıyor...", expanded=True) as status_ai:
+                    try:
+                        genai.configure(api_key=api_key)
+                        model_ai = genai.GenerativeModel('gemini-1.5-flash')
+                        prompt_knowledge = f"""
+                        Motosiklet ekipmanları konusunda uzman bir asistansın.
+                        Kullanıcı '{brand} {model}' model eldiveni soruyor.
+                        Kendi bilgi bankanı (eğitim verini) tara ve şunları cevapla:
+                        1. Bu marka/model bilindik bir model mi?
+                        2. Geçmişte bu modelin 'EN 13594' sertifikası olduğuna dair bir bilgin var mı?
+                        3. Kullanıcılar arasında bu modelin koruması hakkında genel kanı nedir? (Güvenli mi, dayanıksız mı?)
+                        Lütfen çok kısa ve net Türkçe cevap ver. Kesin bilgi yoksa "Veri tabanımda kesin bilgi yok" de.
+                        """
+                        response = model_ai.generate_content(prompt_knowledge)
+                        st.info("🤖 **AI Danışman Görüşü:**")
+                        st.write(response.text)
+                        status_ai.update(label="AI Analizi Tamamlandı", state="complete", expanded=False)
+                    except Exception as e:
+                        st.error(f"AI Hatası: {e}")
             
-            # ---------------------------
-            # 1. ADIM: Otomatik Tarama (Hızlı Bakış)
-            # ---------------------------
             st.write("---")
-            st.markdown("### 1. 🤖 Otomatik Hızlı Tarama")
             
-            # Tek bir geniş kapsamlı sorgu ile şansımızı deneyelim
-            # Örn: "Scoyco MC29 certificate pdf"
+            status_container = st.status("🕵️ İnternet ve Forumlar Taranıyor...", expanded=True)
+            
+            # ---------------------------
+            # 1. ADIM: Otomatik Sertifika Taraması
+            # ---------------------------
+            st.markdown("### 1. 📄 Sertifika Belgesi Kontrolü")
             auto_query = f"{brand} {model} certificate EN 13594 filetype:pdf"
             results_auto, _ = search_ddg(auto_query, max_res=3)
             
             if results_auto:
                 for res in results_auto:
-                    st.success(f"✅ **Otomatik Bulunan Belge:** [{res.get('title')}]({res.get('href')})")
+                    st.success(f"✅ **Belge Bulundu:** [{res.get('title')}]({res.get('href')})")
                     score += 50
             else:
-                st.warning("⚠️ Robot otomatik belge bulamadı. Manuel 'Derin Arama' gerekiyor.")
-
-            status_container.update(label="Otomatik tarama bitti, manuel seçenekler aşağıda:", state="complete", expanded=False)
+                st.warning("⚠️ Doğrudan PDF sertifika belgesi bulunamadı.")
 
             # ---------------------------
-            # 2. ADIM: Derin Arama Butonları (Kritik Kısım)
+            # 2. ADIM: Forum Dedektifi (YENİ)
             # ---------------------------
             st.write("---")
-            st.error("👇 **Otomatik Aramalar Başarısızsa Bunlara Tıkla** 👇")
-            st.markdown("Bu butonlar, Google'ın özel komutlarını kullanarak gizli dosyaları arar.")
+            st.markdown("### 2. 🗣️ Forum Dedektifi (Kullanıcı Tartışmaları)")
+            st.caption("Motosiklet.net, Technopat ve Facebook gruplarındaki tartışmalar:")
+            
+            # Forumlarda spesifik arama
+            forum_query = f'site:motosiklet.net OR site:technopat.net OR site:facebook.com "{full_name}" koruma'
+            results_forum, _ = search_ddg(forum_query, max_res=5)
+            
+            if results_forum:
+                for res in results_forum:
+                    st.info(f"🗨️ **Tartışma:** [{res.get('title')}]({res.get('href')})\n\n_{res.get('body')}_")
+            else:
+                st.info("Bu model hakkında forumlarda özel bir tartışma bulunamadı.")
+
+            # ---------------------------
+            # 3. ADIM: Pazar Yeri Manuel Linkleri
+            # ---------------------------
+            st.write("---")
+            st.markdown("### 3. 🛍️ Pazar Yeri Kontrolü")
+            st.caption("Yorumları en iyi kendi sitesinde görebilirsiniz:")
             
             c1, c2 = st.columns(2)
-            
             with c1:
-                st.markdown("##### 📄 PDF & Katalog Arama")
-                # filetype:pdf komutuyla sadece PDF belgelerini arar
-                q_pdf = f'{brand} {model} "declaration of conformity" filetype:pdf'
-                st.link_button("1. Uygunluk Beyanı (PDF) Ara", create_google_link(q_pdf))
-                
-                # catalog komutuyla ürün kataloğunu arar
-                q_cat = f'{brand} motorcycle gloves catalogue pdf'
-                st.link_button("2. Marka Kataloğunu Ara", create_google_link(q_cat))
-
+                st.link_button("👉 Trendyol Yorumları", create_google_link(f'site:trendyol.com "{full_name}" yorum'))
             with c2:
-                st.markdown("##### 🌏 Resmi Site & İmaj Arama")
-                # site: komutuyla sadece markanın kendi sitesini tarar
-                # Marka isminden boşlukları silip domain tahmini yapıyoruz (scoyco -> scoyco.com)
-                domain_guess = brand.replace(" ", "").lower() + ".com"
-                q_site = f'site:{domain_guess} "EN 13594"'
-                st.link_button(f"3. {domain_guess} İçini Tara", create_google_link(q_site))
-                
-                # Görsel arama için link (Sertifika resimlerini bulmak için)
-                q_img = f'{brand} {model} EN 13594 certificate label'
-                img_search_url = f"https://www.google.com/search?q={urllib.parse.quote(q_img)}&tbm=isch"
-                st.link_button("4. Sertifika Resimlerini Ara", img_search_url)
+                st.link_button("👉 Hepsiburada Soru-Cevap", create_google_link(f'site:hepsiburada.com "{full_name}" soru'))
 
-            st.info("💡 **İpucu:** 4. butona tıklayıp Görsellerde gezinin. Genellikle sertifika kağıdının fotoğrafını çeken kullanıcıları orada bulursunuz.")
-
-            # ---------------------------
-            # 3. ADIM: Türkiye Pazarı ve Yorumlar (GENİŞLETİLMİŞ)
-            # ---------------------------
-            st.write("---")
-            st.markdown("### 3. 🇹🇷 Türkiye Pazar Yeri Sonuçları")
-            st.caption("Filtreleme kaldırıldı. Bulunan tüm ilgili sonuçlar aşağıdadır:")
-            
-            # Pazar yerlerinde yorum araması yap (Daha fazla sonuç çekip filtreleyeceğiz)
-            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}"'
-            results_tr, errors = search_ddg(tr_query, max_res=8)
-            
-            if results_tr:
-                # Sadece ilgili anahtar kelimeleri içerenleri vurgula ama hepsini göster
-                relevant_keywords = ["en 13594", "13594", "ce sertifika", "ce belge", "ce onay", "koruma seviye", "sertifikalı"]
-                
-                with st.expander("💬 Bulunan Ürün Sayfaları ve Yorumlar", expanded=True):
-                    for res in results_tr:
-                        content = (res.get('title', '') + " " + res.get('body', '')).lower()
-                        
-                        # İkon belirleme
-                        icon = "🛒" # Standart ikon
-                        if any(kw in content for kw in relevant_keywords):
-                            icon = "✅ (Sertifika Bahsi Var)"
-                            st.success(f"**{icon} {res.get('title')}**") # Önemli olanı yeşil yap
-                        else:
-                            st.markdown(f"**{icon} {res.get('title')}**")
-
-                        # İçeriği göster
-                        body_text = res.get('body', 'Özet yok')
-                        st.caption(f"...{body_text}...")
-                        st.markdown(f"[🔗 Sayfaya Git]({res.get('href')})")
-                        st.divider()
-            else:
-                st.info("Bu ürün için pazar yerlerinde indekslenmiş sonuç bulunamadı.")
-                st.link_button("👉 Manuel Olarak Trendyol/Hepsiburada'da Ara", create_google_link(tr_query))
+            status_container.update(label="Tarama Bitti", state="complete", expanded=False)
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
 with tab2:
-    st.info("İnternette bulamıyorsanız tek çare: **Etiketi çekip buraya yüklemek.**")
+    st.success("💡 **İPUCU:** En kesin sonuç için eldivenin içindeki etiketin fotoğrafını çekip buraya yükleyin. AI sizin için okuyacaktır.")
     uploaded_file = st.file_uploader("Resim Yükle", type=["jpg", "png", "jpeg"])
 
     if uploaded_file and st.button("🤖 AI İle Analiz Et"):
@@ -203,7 +185,6 @@ with tab2:
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     img = Image.open(uploaded_file)
                     
-                    # DÜZELTME: Uzun metinler için üç tırnak kullanımı
                     prompt = """
                     Bu motosiklet eldiveni etiketini analiz et. 
                     EN 13594 var mı? Level 1 mi 2 mi? KP var mı? 
@@ -212,6 +193,7 @@ with tab2:
                     """
                     
                     response = model.generate_content([prompt, img])
+                    st.markdown("### 📝 AI Etiket Raporu")
                     st.write(response.text)
                 except Exception as e:
                     st.error(f"Hata: {e}")
