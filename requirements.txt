@@ -1,0 +1,4 @@
+﻿streamlit
+googlesearch-python
+google-generativeai
+Pillow
