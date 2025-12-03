@@ -38,7 +38,7 @@ def search_ddg(query, max_res=3):
 def ask_ai_persona(api_key, persona, prompt, image=None):
     """
     Belirli bir uzmanlık alanına göre AI'ya soru sorar.
-    Eski modeller yerine sadece güncel 1.5 serisi modelleri dener.
+    En kararlı versiyon numaralarını öncelikli dener.
     """
     try:
         genai.configure(api_key=api_key)
@@ -51,12 +51,13 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        # Denenecek Güncel Modeller Listesi
+        # GÜNCELLENMİŞ MODEL LİSTESİ (En kararlıdan en yeniye)
+        # '-001' takılı versiyonlar genellikle alias'lardan (kısa isimlerden) daha kararlıdır.
         models_to_try = [
-            'gemini-1.5-flash',          # En hızlı
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro',            # Daha güçlü
-            'gemini-1.5-pro-latest'
+            'gemini-1.5-flash-001',      # Öncelikli: Kararlı Flash sürümü
+            'gemini-1.5-flash',          # Yedek: Flash kısa ismi
+            'gemini-1.5-pro-001',        # Öncelikli: Kararlı Pro sürümü
+            'gemini-1.5-pro'             # Yedek: Pro kısa ismi
         ]
         
         last_error = ""
@@ -76,7 +77,7 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
                 last_error = str(e)
                 continue 
 
-        return f"⚠️ Yapay zeka servislerine erişilemedi. (Hata: {last_error})"
+        return f"⚠️ Yapay zeka servislerine erişilemedi. (Son Hata: {last_error})"
 
     except Exception as e:
         return f"Kritik Hata: {str(e)}"
