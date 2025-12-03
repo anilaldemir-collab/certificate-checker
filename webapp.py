@@ -190,4 +190,16 @@ with tab2:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     img = Image.open(uploaded_file)
-                    prompt = "Bu motosiklet eldiveni etiketini analiz et. EN 13594 var mı? Level 1 mi 2 mi? KP var mı? Ürün markası bilinmedik olsa bile etiketi
+                    
+                    # DÜZELTME: Uzun metinler için üç tırnak kullanımı
+                    prompt = """
+                    Bu motosiklet eldiveni etiketini analiz et. 
+                    EN 13594 var mı? Level 1 mi 2 mi? KP var mı? 
+                    Ürün markası bilinmedik olsa bile etiketi güvenli duruyor mu? 
+                    Türkçe özetle.
+                    """
+                    
+                    response = model.generate_content([prompt, img])
+                    st.write(response.text)
+                except Exception as e:
+                    st.error(f"Hata: {e}")
