@@ -52,11 +52,10 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         """
         
         # Denenecek Güncel Modeller Listesi
-        # gemini-pro-vision ARTIK YOK. Sadece 1.5 serisi kullanılmalı.
         models_to_try = [
-            'gemini-1.5-flash',          # En hızlı, resim destekler
-            'gemini-1.5-flash-latest',   # Alternatif isim
-            'gemini-1.5-pro',            # Daha güçlü, resim destekler
+            'gemini-1.5-flash',          # En hızlı
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro',            # Daha güçlü
             'gemini-1.5-pro-latest'
         ]
         
@@ -71,13 +70,12 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
                 else:
                     response = model.generate_content(full_prompt)
                 
-                return response.text # Başarılıysa cevabı dön
+                return response.text 
                 
             except Exception as e:
                 last_error = str(e)
-                continue # Bu model çalışmadıysa sıradakine geç
+                continue 
 
-        # Hiçbiri çalışmadıysa
         return f"⚠️ Yapay zeka servislerine erişilemedi. (Hata: {last_error})"
 
     except Exception as e:
@@ -198,4 +196,30 @@ with tab2:
         uploaded_file = st.file_uploader("Eldiven Etiketini Yükle", type=["jpg", "png", "jpeg"])
 
         if uploaded_file and st.button("🤖 Konseyi Topla ve Analiz Et"):
-            img =
+            img = Image.open(uploaded_file)
+            
+            st.divider()
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("### 📜 Mevzuatçı")
+                with st.spinner("Etiket kodları okunuyor..."):
+                    resp = ask_ai_persona(api_key, "Gümrük Denetçisi", 
+                        "Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?", img)
+                    st.info(resp)
+            
+            with col2:
+                st.markdown("### 🛠️ Mühendis")
+                with st.spinner("Dikiş ve malzeme inceleniyor..."):
+                    resp = ask_ai_persona(api_key, "Güvenlik Ekipmanı Mühendisi", 
+                        "Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı?", img)
+                    st.warning(resp)
+            
+            with col3:
+                st.markdown("### 🕵️ Dedektif")
+                with st.spinner("Sahtecilik kontrolü..."):
+                    resp = ask_ai_persona(api_key, "Sahte Ürün Uzmanı", 
+                        "Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz?", img)
+                    st.error(resp)
+            
+            st.success("✅ **Konsey Kararı:** Üç görüşü okuyarak nihai kararınızı verin.")
