@@ -35,64 +35,13 @@ def search_ddg(query, max_res=3):
         except: continue
     return [], ["Bağlantı hatası"]
 
-def get_best_available_model(api_key):
-    """
-    Google API'sine bağlanıp o an kullanılabilir olan EN İYİ modeli otomatik seçer.
-    Ezbere model ismi kullanmaz, böylece 404 hatası alınmaz.
-    """
-    try:
-        genai.configure(api_key=api_key)
-        
-        # Kullanıcının erişebildiği tüm modelleri listele
-        available_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                available_models.append(m.name)
-        
-        # Öncelik sırasına göre model seç (Flash > Pro > Diğerleri)
-        # Model isimleri genellikle 'models/gemini-1.5-flash' şeklindedir
-        
-        # 1. Tercih: 1.5 Flash (En hızlı ve güncel)
-        for model in available_models:
-            if '1.5-flash' in model:
-                return model
-        
-        # 2. Tercih: 1.5 Pro (Daha zeki ama yavaş olabilir)
-        for model in available_models:
-            if '1.5-pro' in model:
-                return model
-                
-        # 3. Tercih: Gemini Pro (Eski ama kararlı sürüm)
-        for model in available_models:
-            if 'gemini-pro' in model and 'vision' not in model:
-                return model
-        
-        # Hiçbiri yoksa listenin ilkini döndür
-        if available_models:
-            return available_models[0]
-            
-        return None
-        
-    except Exception as e:
-        return None
-
 def ask_ai_persona(api_key, persona, prompt, image=None):
-    """Belirli bir uzmanlık alanına göre AI'ya soru sorar (Otomatik Model Seçimli)."""
+    """
+    Belirli bir uzmanlık alanına göre AI'ya soru sorar.
+    Eski modeller yerine sadece güncel 1.5 serisi modelleri dener.
+    """
     try:
-        # Önce çalışan modeli bul
-        model_name = get_best_available_model(api_key)
-        
-        if not model_name:
-            return "⚠️ Hata: Hesabınızda aktif bir Gemini modeli bulunamadı (API Key veya Bölge sorunu)."
-            
         genai.configure(api_key=api_key)
-        
-        # Eğer resim varsa ve seçilen model sadece metin modeliyse (eski gemini-pro gibi),
-        # vizyon modeline geçiş yapmaya çalış
-        if image and 'vision' not in model_name and '1.5' not in model_name:
-             model_name = 'models/gemini-pro-vision'
-
-        model = genai.GenerativeModel(model_name)
         
         full_prompt = f"""
         GÖREV: Sen '{persona}' rolünde bir uzmansın.
@@ -102,13 +51,37 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        if image:
-            response = model.generate_content([full_prompt, image])
-        else:
-            response = model.generate_content(full_prompt)
-        return response.text
+        # Denenecek Güncel Modeller Listesi
+        # gemini-pro-vision ARTIK YOK. Sadece 1.5 serisi kullanılmalı.
+        models_to_try = [
+            'gemini-1.5-flash',          # En hızlı, resim destekler
+            'gemini-1.5-flash-latest',   # Alternatif isim
+            'gemini-1.5-pro',            # Daha güçlü, resim destekler
+            'gemini-1.5-pro-latest'
+        ]
+        
+        last_error = ""
+        
+        for model_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                
+                if image:
+                    response = model.generate_content([full_prompt, image])
+                else:
+                    response = model.generate_content(full_prompt)
+                
+                return response.text # Başarılıysa cevabı dön
+                
+            except Exception as e:
+                last_error = str(e)
+                continue # Bu model çalışmadıysa sıradakine geç
+
+        # Hiçbiri çalışmadıysa
+        return f"⚠️ Yapay zeka servislerine erişilemedi. (Hata: {last_error})"
+
     except Exception as e:
-        return f"Bağlantı Hatası: {str(e)}"
+        return f"Kritik Hata: {str(e)}"
 
 # -----------------------------------------------------------------------------
 # KENAR ÇUBUĞU
@@ -225,30 +198,4 @@ with tab2:
         uploaded_file = st.file_uploader("Eldiven Etiketini Yükle", type=["jpg", "png", "jpeg"])
 
         if uploaded_file and st.button("🤖 Konseyi Topla ve Analiz Et"):
-            img = Image.open(uploaded_file)
-            
-            st.divider()
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("### 📜 Mevzuatçı")
-                with st.spinner("Etiket kodları okunuyor..."):
-                    resp = ask_ai_persona(api_key, "Gümrük Denetçisi", 
-                        "Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?", img)
-                    st.info(resp)
-            
-            with col2:
-                st.markdown("### 🛠️ Mühendis")
-                with st.spinner("Dikiş ve malzeme inceleniyor..."):
-                    resp = ask_ai_persona(api_key, "Güvenlik Ekipmanı Mühendisi", 
-                        "Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı?", img)
-                    st.warning(resp)
-            
-            with col3:
-                st.markdown("### 🕵️ Dedektif")
-                with st.spinner("Sahtecilik kontrolü..."):
-                    resp = ask_ai_persona(api_key, "Sahte Ürün Uzmanı", 
-                        "Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz?", img)
-                    st.error(resp)
-            
-            st.success("✅ **Konsey Kararı:** Üç görüşü okuyarak nihai kararınızı verin.")
+            img =
