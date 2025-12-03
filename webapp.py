@@ -15,9 +15,8 @@ api_key = None
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
-    with st.sidebar:
-        st.warning("⚠️ API Key yok (AI çalışmaz).")
-        api_key = st.text_input("Google API Key", type="password")
+    # Sidebar'ı aşağıda tekrar tanımlayacağımız için burayı geçici tutuyoruz
+    pass 
 
 # -----------------------------------------------------------------------------
 # FONKSİYONLAR
@@ -33,16 +32,13 @@ def search_ddg(query, max_res=3):
     Güçlendirilmiş Arama: Standart yol engellenirse 'Lite' ve 'HTML' 
     modlarını deneyerek engellemeyi aşmaya çalışır. Sonuçları önbelleğe alır.
     """
-    # DuckDuckGo'nun farklı giriş kapıları
     backends = ['api', 'html', 'lite'] 
     
     debug_errors = []
 
     for backend in backends:
         try:
-            # Her denemede rastgele kısa bir bekleme yap
             time.sleep(random.uniform(0.3, 1.0))
-            
             with DDGS() as ddgs:
                 results = list(ddgs.text(query, max_results=max_res, backend=backend))
                 if results:
@@ -51,7 +47,31 @@ def search_ddg(query, max_res=3):
             debug_errors.append(f"{backend} modu hatası: {str(e)}")
             continue
             
-    return [], debug_errors # Hiçbiri çalışmazsa boş dön ve hataları raporla
+    return [], debug_errors
+
+# -----------------------------------------------------------------------------
+# KENAR ÇUBUĞU (BİLGİ & AYARLAR)
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.header("⚙️ Ayarlar")
+    if not api_key:
+        st.warning("⚠️ API Key yok (AI çalışmaz).")
+        api_key = st.text_input("Google API Key", type="password")
+        st.markdown("[👉 Ücretsiz Key Al](https://aistudio.google.com/app/apikey)")
+
+    st.divider()
+    
+    st.header("📚 Veritabanları")
+    st.info("Sertifikaları kontrol edebileceğiniz en güvenilir kaynaklar:")
+    
+    st.markdown("### 🧪 Test Merkezleri")
+    st.link_button("📊 MotoCAP (Resmi Test Arşivi)", "https://www.motocap.com.au/products/gloves")
+    st.link_button("🏢 NANDO (Onaylı Laboratuvarlar)", "https://ec.europa.eu/growth/tools-databases/nando/index.cfm?fuseaction=directive.notifiedbody&dir_id=155501")
+    
+    st.markdown("### 🛍️ Güvenilir Mağazalar")
+    st.caption("Bu mağazalar ürün özelliklerinde sertifika kodunu mutlaka yazar:")
+    st.link_button("🇩🇪 FC-Moto (Almanya)", "https://www.fc-moto.de/")
+    st.link_button("🇬🇧 SportsBikeShop (İngiltere)", "https://www.sportsbikeshop.co.uk/")
 
 # -----------------------------------------------------------------------------
 # ARAYÜZ
@@ -97,16 +117,12 @@ with tab1:
                         break
             
             if not found:
-                st.warning("⚠️ Otomatik taramada sonuç alınamadı (Sunucu engeli olabilir).")
-                # Manuel Buton
+                st.warning("⚠️ Otomatik taramada sonuç alınamadı.")
                 st.link_button(
                     label="👉 Tıkla: MotoCAP Sonuçlarını Kendin Gör",
                     url=create_google_link(motocap_query),
                     type="secondary"
                 )
-                if errors:
-                    with st.expander("Teknik Detay (Hata Kodları)"):
-                        st.write(errors)
 
             # ---------------------------
             # 2. ADIM: PDF Belge
@@ -134,12 +150,50 @@ with tab1:
                 )
 
             # ---------------------------
-            # 3. ADIM: Genel Kontrol
+            # 3. ADIM: Mağaza Teyidi (YENİ)
             # ---------------------------
             st.write("---")
-            st.markdown("### 3. 🌍 Genel İnceleme")
+            st.markdown("### 3. 🛍️ Güvenilir Mağaza Teyidi (FC-Moto & SBS)")
+            st.info("Avrupa yasaları gereği bu mağazalar sertifikasız ürüne 'Certified' yazamaz.")
+            
+            # FC-Moto Araması
+            fc_query = f"site:fc-moto.de {full_name} EN 13594"
+            results_fc, _ = search_ddg(fc_query)
+            
+            found_fc = False
+            if results_fc:
+                for res in results_fc:
+                    if "fc-moto" in res.get('href', ''):
+                        st.success(f"✅ **FC-Moto Kaydı:** [{res.get('title')}]({res.get('href')})")
+                        if score < 50: score += 20
+                        found_fc = True
+                        break
+            
+            if not found_fc:
+                st.markdown(f"[👉 FC-Moto'da Ara]({create_google_link(fc_query)})", unsafe_allow_html=True)
+
+            # SportsBikeShop Araması
+            sbs_query = f"site:sportsbikeshop.co.uk {full_name} CE certified"
+            results_sbs, _ = search_ddg(sbs_query)
+            
+            found_sbs = False
+            if results_sbs:
+                for res in results_sbs:
+                    if "sportsbikeshop" in res.get('href', ''):
+                        st.success(f"✅ **SportsBikeShop Kaydı:** [{res.get('title')}]({res.get('href')})")
+                        if score < 50: score += 20
+                        found_sbs = True
+                        break
+            
+            if not found_sbs:
+                st.markdown(f"[👉 SportsBikeShop'ta Ara]({create_google_link(sbs_query)})", unsafe_allow_html=True)
+
+            # ---------------------------
+            # 4. ADIM: Genel Kontrol
+            # ---------------------------
+            st.write("---")
+            st.markdown("### 4. 🌍 Genel İnceleme")
             review_query = f"{full_name} motorcycle glove EN 13594 review"
-            st.info("İncelemelerde 'EN 13594' standardı geçiyor mu?")
             st.link_button(
                 label="👉 Tıkla: İncelemeleri Google'da Gör",
                 url=create_google_link(review_query),
