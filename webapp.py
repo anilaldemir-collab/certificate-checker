@@ -39,7 +39,8 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
     """Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar."""
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # MODEL İSMİ GÜNCELLENDİ: 'gemini-1.5-flash-001' daha kararlıdır.
+        model = genai.GenerativeModel('gemini-1.5-flash-001')
         
         full_prompt = f"""
         GÖREV: Sen '{persona}' rolünde bir uzmansın.
