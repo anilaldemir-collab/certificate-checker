@@ -35,13 +35,64 @@ def search_ddg(query, max_res=3):
         except: continue
     return [], ["Bağlantı hatası"]
 
-def ask_ai_persona(api_key, persona, prompt, image=None):
+def get_best_available_model(api_key):
     """
-    Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar. 
-    Hata durumunda (404 vb.) otomatik olarak çalışan diğer modelleri dener.
+    Google API'sine bağlanıp o an kullanılabilir olan EN İYİ modeli otomatik seçer.
+    Ezbere model ismi kullanmaz, böylece 404 hatası alınmaz.
     """
     try:
         genai.configure(api_key=api_key)
+        
+        # Kullanıcının erişebildiği tüm modelleri listele
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        
+        # Öncelik sırasına göre model seç (Flash > Pro > Diğerleri)
+        # Model isimleri genellikle 'models/gemini-1.5-flash' şeklindedir
+        
+        # 1. Tercih: 1.5 Flash (En hızlı ve güncel)
+        for model in available_models:
+            if '1.5-flash' in model:
+                return model
+        
+        # 2. Tercih: 1.5 Pro (Daha zeki ama yavaş olabilir)
+        for model in available_models:
+            if '1.5-pro' in model:
+                return model
+                
+        # 3. Tercih: Gemini Pro (Eski ama kararlı sürüm)
+        for model in available_models:
+            if 'gemini-pro' in model and 'vision' not in model:
+                return model
+        
+        # Hiçbiri yoksa listenin ilkini döndür
+        if available_models:
+            return available_models[0]
+            
+        return None
+        
+    except Exception as e:
+        return None
+
+def ask_ai_persona(api_key, persona, prompt, image=None):
+    """Belirli bir uzmanlık alanına göre AI'ya soru sorar (Otomatik Model Seçimli)."""
+    try:
+        # Önce çalışan modeli bul
+        model_name = get_best_available_model(api_key)
+        
+        if not model_name:
+            return "⚠️ Hata: Hesabınızda aktif bir Gemini modeli bulunamadı (API Key veya Bölge sorunu)."
+            
+        genai.configure(api_key=api_key)
+        
+        # Eğer resim varsa ve seçilen model sadece metin modeliyse (eski gemini-pro gibi),
+        # vizyon modeline geçiş yapmaya çalış
+        if image and 'vision' not in model_name and '1.5' not in model_name:
+             model_name = 'models/gemini-pro-vision'
+
+        model = genai.GenerativeModel(model_name)
         
         full_prompt = f"""
         GÖREV: Sen '{persona}' rolünde bir uzmansın.
@@ -51,44 +102,13 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        # Denenecek Modeller Listesi (Sırasıyla dener)
-        # 1.5 Flash (En Hızlı/Yeni) -> 1.0 Pro (En Kararlı/Eski)
-        models_to_try = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro',
-            'gemini-pro' # En eski ve en yaygın model
-        ]
-        
-        last_error = ""
-        
-        for model_name in models_to_try:
-            try:
-                # Eski modellerde (gemini-pro) resim ve metin modelleri ayrıdır.
-                # Eğer resim varsa ve model 1.5 serisi değilse, 'vision' modelini seç.
-                current_model = model_name
-                if image and '1.5' not in model_name:
-                    current_model = 'gemini-pro-vision'
-                
-                model = genai.GenerativeModel(current_model)
-                
-                if image:
-                    response = model.generate_content([full_prompt, image])
-                else:
-                    response = model.generate_content(full_prompt)
-                
-                return response.text # Başarılı olursa cevabı dön ve çık
-                
-            except Exception as e:
-                # Bu model hata verdiyse kaydet ve sıradakine geç
-                last_error = str(e)
-                continue
-
-        # Döngü bitti ama hiçbiri çalışmadıysa:
-        return f"⚠️ Üzgünüm, yapay zeka modellerine erişilemedi. Hata: {last_error}"
-
+        if image:
+            response = model.generate_content([full_prompt, image])
+        else:
+            response = model.generate_content(full_prompt)
+        return response.text
     except Exception as e:
-        return f"Kritik Hata: {str(e)}"
+        return f"Bağlantı Hatası: {str(e)}"
 
 # -----------------------------------------------------------------------------
 # KENAR ÇUBUĞU
