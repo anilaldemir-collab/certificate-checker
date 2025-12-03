@@ -61,14 +61,14 @@ with st.sidebar:
 
     st.divider()
     
-    st.header("🌏 Çinli/Hintli Üreticiler")
+    st.header("🕵️ Derin Arama Modu")
     st.info("""
-    Bu üreticiler (Scoyco, Pro-Biker vb.) sertifikalarını genelde resmi sitelerinin **"Certificates"** veya **"About Us"** kısmında PDF listesi olarak yayınlar.
+    Otomatik aramalar Çinli sitelerde (Scoyco vb.) yetersiz kalabilir.
     
-    Bot şimdi bu özel sayfaları da tarayacak.
+    Bu durumda **'Derin Arama Linkleri'** bölümündeki butonları kullanın. Bu butonlar Google'ın özel komutlarını (filetype:pdf, site:...) kullanarak gizli dosyaları bulur.
     """)
     
-    st.markdown("### 🔗 Manuel Kontrol Linkleri")
+    st.markdown("### 🔗 Hızlı Linkler")
     st.link_button("🇹🇷 Trendyol'da Ara", "https://www.trendyol.com/")
     st.link_button("🌏 AliExpress Sertifika Kontrol", "https://www.aliexpress.com/")
 
@@ -76,7 +76,7 @@ with st.sidebar:
 # ARAYÜZ
 # -----------------------------------------------------------------------------
 st.title("🛡️ Motosiklet Eldiveni Dedektifi")
-st.markdown("Çinli ve yerel üreticiler için **Gelişmiş Resmi Site Taraması** eklendi.")
+st.markdown("Otomatik sonuç bulunamazsa **Derin Arama Butonları** devreye girer.")
 
 tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 
@@ -84,9 +84,9 @@ tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 with tab1:
     col1, col2 = st.columns(2)
     with col1:
-        brand = st.text_input("Marka", placeholder="Örn: Scoyco, Masontex")
+        brand = st.text_input("Marka", placeholder="Örn: Scoyco")
     with col2:
-        model = st.text_input("Model", placeholder="Örn: MC29, M30")
+        model = st.text_input("Model", placeholder="Örn: MC29")
     
     if st.button("🔍 Analiz Et", type="primary"):
         if not brand or not model:
@@ -95,107 +95,74 @@ with tab1:
             full_name = f"{brand} {model}"
             score = 0
             
-            # Durum bildirme
             status_container = st.status("🕵️ İnternet taranıyor...", expanded=True)
             
             # ---------------------------
-            # 1. ADIM: Üretici Resmi Sitesi (YENİ ÖZELLİK)
+            # 1. ADIM: Otomatik Tarama (Hızlı Bakış)
             # ---------------------------
             st.write("---")
-            st.markdown("### 1. 🌏 Üretici Resmi Sitesi Taraması")
-            st.caption("Çinli/Hintli üreticilerin 'Certificate' sayfaları aranıyor...")
+            st.markdown("### 1. 🤖 Otomatik Hızlı Tarama")
             
-            # Markanın resmi sitesindeki sertifika sayfasını bulmaya çalış
-            # Örn: "Scoyco official website certificate EN 13594"
-            official_query = f'{brand} motorcycle gloves official website certificate "EN 13594"'
-            results_off, _ = search_ddg(official_query, max_res=4)
+            # Tek bir geniş kapsamlı sorgu ile şansımızı deneyelim
+            # Örn: "Scoyco MC29 certificate pdf"
+            auto_query = f"{brand} {model} certificate EN 13594 filetype:pdf"
+            results_auto, _ = search_ddg(auto_query, max_res=3)
             
-            found_off = False
-            if results_off:
-                for res in results_off:
-                    title = res.get('title', '')
-                    link = res.get('href', '')
-                    # Eğer başlıkta Certificate veya CE geçiyorsa
-                    if "certif" in title.lower() or "declaration" in title.lower() or "ce" in title.lower():
-                        st.success(f"✅ **Üretici Belgesi Bulundu:** [{title}]({link})")
-                        score += 60 # Resmi siteden belge bulmak en güçlü kanıttır
-                        found_off = True
-                        break
-            
-            if not found_off:
-                st.warning("⚠️ Üreticinin resmi sitesinde doğrudan bir sertifika sayfası bulunamadı.")
-                st.link_button(
-                    label=f"👉 Tıkla: {brand} Resmi Sitesini Google'da Ara",
-                    url=create_google_link(f'{brand} official website motorcycle gloves'),
-                    type="secondary"
-                )
-
-            # ---------------------------
-            # 2. ADIM: Yerel Pazar (Trendyol, Hepsiburada vb.)
-            # ---------------------------
-            st.write("---")
-            st.markdown("### 2. 🇹🇷 Türkiye Pazarı Taraması")
-            
-            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}" "EN 13594"'
-            results_tr, errors = search_ddg(tr_query, max_res=5)
-            
-            found_tr = False
-            if results_tr:
-                for res in results_tr:
-                    title = res.get('title', '')
-                    link = res.get('href', '')
-                    st.success(f"✅ **Satıcı Beyanı (TR):** [{title}]({link})")
-                    if score < 60: score += 30 
-                    found_tr = True
-                    break
-            
-            if not found_tr:
-                st.info("ℹ️ Türkiye sitelerinde sertifika beyanı bulunamadı.")
-
-            # ---------------------------
-            # 3. ADIM: PDF Belge
-            # ---------------------------
-            st.write("---")
-            st.markdown("### 3. 📄 Resmi Belge (Global)")
-            
-            doc_query = f"{brand} {model} declaration of conformity filetype:pdf"
-            results, _ = search_ddg(doc_query)
-            
-            found_pdf = False
-            if results:
-                for res in results:
-                    if res.get('href', '').lower().endswith('.pdf'):
-                        st.success(f"✅ **PDF Bulundu:** [{res.get('title')}]({res.get('href')})")
-                        if score < 60: score += 50
-                        found_pdf = True
-                        break
-            
-            if not found_pdf:
-                st.info("ℹ️ Doğrudan PDF dosyası bulunamadı.")
-
-            status_container.update(label="İşlem Tamamlandı", state="complete", expanded=False)
-            
-            # ---------------------------
-            # SONUÇ PUANI
-            # ---------------------------
-            st.divider()
-            if score > 50:
-                st.balloons()
-                st.success(f"**Otomatik Sistem Güven Skoru: {score}/100 (GÜVENLİ)**\n\nResmi kaynaklarda sertifika izine rastlandı.")
-            elif score > 0:
-                st.warning(f"**Otomatik Sistem Güven Skoru: {score}/100 (ORTA)**\n\nSadece satıcı beyanları var. Lütfen etiketi kontrol edin.")
+            if results_auto:
+                for res in results_auto:
+                    st.success(f"✅ **Otomatik Bulunan Belge:** [{res.get('title')}]({res.get('href')})")
+                    score += 50
             else:
-                st.error("**HİÇBİR VERİ BULUNAMADI**")
-                st.info("""
-                İnternette bu model için sertifika izi yok. Bu durum, düşük bütçeli markalarda yaygındır.
+                st.warning("⚠️ Robot otomatik belge bulamadı. Manuel 'Derin Arama' gerekiyor.")
+
+            status_container.update(label="Otomatik tarama bitti, manuel seçenekler aşağıda:", state="complete", expanded=False)
+
+            # ---------------------------
+            # 2. ADIM: Derin Arama Butonları (Kritik Kısım)
+            # ---------------------------
+            st.write("---")
+            st.error("👇 **Otomatik Aramalar Başarısızsa Bunlara Tıkla** 👇")
+            st.markdown("Bu butonlar, Google'ın özel komutlarını kullanarak gizli dosyaları arar.")
+            
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.markdown("##### 📄 PDF & Katalog Arama")
+                # filetype:pdf komutuyla sadece PDF belgelerini arar
+                q_pdf = f'{brand} {model} "declaration of conformity" filetype:pdf'
+                st.link_button("1. Uygunluk Beyanı (PDF) Ara", create_google_link(q_pdf))
                 
-                👉 **En kesin çözüm: Yandaki '📷 Fotoğraf Analizi' sekmesine geçip etiketi okutun.**
-                """)
+                # catalog komutuyla ürün kataloğunu arar
+                q_cat = f'{brand} motorcycle gloves catalogue pdf'
+                st.link_button("2. Marka Kataloğunu Ara", create_google_link(q_cat))
+
+            with c2:
+                st.markdown("##### 🌏 Resmi Site & İmaj Arama")
+                # site: komutuyla sadece markanın kendi sitesini tarar
+                # Marka isminden boşlukları silip domain tahmini yapıyoruz (scoyco -> scoyco.com)
+                domain_guess = brand.replace(" ", "").lower() + ".com"
+                q_site = f'site:{domain_guess} "EN 13594"'
+                st.link_button(f"3. {domain_guess} İçini Tara", create_google_link(q_site))
+                
+                # Görsel arama için link (Sertifika resimlerini bulmak için)
+                q_img = f'{brand} {model} EN 13594 certificate label'
+                img_search_url = f"https://www.google.com/search?q={urllib.parse.quote(q_img)}&tbm=isch"
+                st.link_button("4. Sertifika Resimlerini Ara", img_search_url)
+
+            st.info("💡 **İpucu:** 4. butona tıklayıp Görsellerde gezinin. Genellikle sertifika kağıdının fotoğrafını çeken kullanıcıları orada bulursunuz.")
+
+            # ---------------------------
+            # 3. ADIM: Türkiye Pazarı
+            # ---------------------------
+            st.write("---")
+            st.markdown("### 3. 🇹🇷 Satıcı Beyanları")
+            tr_query = f'site:trendyol.com OR site:hepsiburada.com "{full_name}" "EN 13594"'
+            st.link_button("👉 Trendyol/Hepsiburada Yorumlarını Ara", create_google_link(tr_query))
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
 with tab2:
-    st.info("Bilinmedik markalar için EN GÜVENİLİR YÖNTEM budur. Etiketin fotoğrafını çekip yükleyin.")
+    st.info("İnternette bulamıyorsanız tek çare: **Etiketi çekip buraya yüklemek.**")
     uploaded_file = st.file_uploader("Resim Yükle", type=["jpg", "png", "jpeg"])
 
     if uploaded_file and st.button("🤖 AI İle Analiz Et"):
