@@ -1,4 +1,4 @@
-﻿streamlit
-googlesearch-python
+streamlit
+duckduckgo-search
 google-generativeai
 Pillow
