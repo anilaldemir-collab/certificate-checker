@@ -38,7 +38,8 @@ def search_ddg(query, max_res=3):
 def ask_ai_persona(api_key, persona, prompt, image=None):
     """
     Belirli bir uzmanlık alanına göre AI'ya soru sorar.
-    En kararlı versiyon numaralarını öncelikli dener.
+    Model isimlerini ezbere denemek yerine, API'den aktif model listesini çekip
+    en uygun olanı (Flash > Pro > Legacy) dinamik olarak seçer.
     """
     try:
         genai.configure(api_key=api_key)
@@ -51,36 +52,66 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        # GÜNCELLENMİŞ MODEL LİSTESİ (En kararlıdan en yeniye)
-        # '-001' takılı versiyonlar genellikle alias'lardan (kısa isimlerden) daha kararlıdır.
-        models_to_try = [
-            'gemini-1.5-flash-001',      # Öncelikli: Kararlı Flash sürümü
-            'gemini-1.5-flash',          # Yedek: Flash kısa ismi
-            'gemini-1.5-pro-001',        # Öncelikli: Kararlı Pro sürümü
-            'gemini-1.5-pro'             # Yedek: Pro kısa ismi
-        ]
-        
-        last_error = ""
-        
-        for model_name in models_to_try:
-            try:
-                model = genai.GenerativeModel(model_name)
-                
-                if image:
-                    response = model.generate_content([full_prompt, image])
-                else:
-                    response = model.generate_content(full_prompt)
-                
-                return response.text 
-                
-            except Exception as e:
-                last_error = str(e)
-                continue 
+        # 1. Hesabın erişebildiği TÜM modelleri listele
+        # (Bu işlem 404 hatasını önler çünkü sadece var olanları deneriz)
+        available_models = []
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+        except Exception as e:
+            return f"Model listesi alınamadı: {str(e)}"
 
-        return f"⚠️ Yapay zeka servislerine erişilemedi. (Son Hata: {last_error})"
+        # 2. En iyi modeli akıllıca seç
+        target_model_name = None
+        
+        # Öncelik 1: 1.5 Flash (En hızlı ve güncel)
+        for m in available_models:
+            if 'flash' in m.lower() and '1.5' in m:
+                target_model_name = m
+                break
+        
+        # Öncelik 2: 1.5 Pro (Daha zeki)
+        if not target_model_name:
+            for m in available_models:
+                if 'pro' in m.lower() and '1.5' in m:
+                    target_model_name = m
+                    break
+        
+        # Öncelik 3: Gemini Pro (Eski kararlı sürüm - Vision/Text ayrımı olabilir)
+        if not target_model_name:
+            if image:
+                # Resim varsa 'vision' yeteneği olanı bul
+                for m in available_models:
+                    if 'vision' in m.lower():
+                        target_model_name = m
+                        break
+            else:
+                # Resim yoksa standart pro
+                for m in available_models:
+                    if 'gemini-pro' in m and 'vision' not in m:
+                        target_model_name = m
+                        break
+        
+        # Hiçbiri yoksa listenin ilkini al (Son çare)
+        if not target_model_name and available_models:
+            target_model_name = available_models[0]
+            
+        if not target_model_name:
+            return "⚠️ Hata: Hesabınızda kullanılabilir aktif bir AI modeli bulunamadı."
+
+        # 3. Seçilen model ile üret
+        model = genai.GenerativeModel(target_model_name)
+        
+        if image:
+            response = model.generate_content([full_prompt, image])
+        else:
+            response = model.generate_content(full_prompt)
+        
+        return response.text 
 
     except Exception as e:
-        return f"Kritik Hata: {str(e)}"
+        return f"Beklenmeyen Hata: {str(e)}"
 
 # -----------------------------------------------------------------------------
 # KENAR ÇUBUĞU
