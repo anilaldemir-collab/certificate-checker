@@ -61,23 +61,22 @@ with st.sidebar:
 
     st.divider()
     
-    st.header("📚 Veritabanları")
-    st.info("Sertifikaları kontrol edebileceğiniz en güvenilir kaynaklar:")
+    st.header("🌏 Çinli/Hintli Üreticiler")
+    st.info("""
+    Bu üreticiler (Scoyco, Pro-Biker vb.) sertifikalarını genelde resmi sitelerinin **"Certificates"** veya **"About Us"** kısmında PDF listesi olarak yayınlar.
     
-    st.markdown("### 🧪 Test Merkezleri")
-    st.link_button("📊 MotoCAP (Resmi Test Arşivi)", "https://www.motocap.com.au/products/gloves")
-    st.link_button("🏢 NANDO (Onaylı Laboratuvarlar)", "https://ec.europa.eu/growth/tools-databases/nando/index.cfm?fuseaction=directive.notifiedbody&dir_id=155501")
+    Bot şimdi bu özel sayfaları da tarayacak.
+    """)
     
-    st.markdown("### 🛍️ Güvenilir Mağazalar")
-    st.caption("Bu mağazalar ürün özelliklerinde sertifika kodunu mutlaka yazar:")
-    st.link_button("🇩🇪 FC-Moto (Almanya)", "https://www.fc-moto.de/")
-    st.link_button("🇬🇧 SportsBikeShop (İngiltere)", "https://www.sportsbikeshop.co.uk/")
+    st.markdown("### 🔗 Manuel Kontrol Linkleri")
+    st.link_button("🇹🇷 Trendyol'da Ara", "https://www.trendyol.com/")
+    st.link_button("🌏 AliExpress Sertifika Kontrol", "https://www.aliexpress.com/")
 
 # -----------------------------------------------------------------------------
 # ARAYÜZ
 # -----------------------------------------------------------------------------
 st.title("🛡️ Motosiklet Eldiveni Dedektifi")
-st.markdown("Otomatik tarama çalışmazsa, **Manuel Doğrulama Butonları** devreye girer.")
+st.markdown("Çinli ve yerel üreticiler için **Gelişmiş Resmi Site Taraması** eklendi.")
 
 tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 
@@ -85,9 +84,9 @@ tab1, tab2 = st.tabs(["🔍 İnternet Araması", "📷 Fotoğraf Analizi (AI)"])
 with tab1:
     col1, col2 = st.columns(2)
     with col1:
-        brand = st.text_input("Marka", placeholder="Örn: Revit")
+        brand = st.text_input("Marka", placeholder="Örn: Scoyco, Masontex")
     with col2:
-        model = st.text_input("Model", placeholder="Örn: Sand 4")
+        model = st.text_input("Model", placeholder="Örn: MC29, M30")
     
     if st.button("🔍 Analiz Et", type="primary"):
         if not brand or not model:
@@ -100,121 +99,103 @@ with tab1:
             status_container = st.status("🕵️ İnternet taranıyor...", expanded=True)
             
             # ---------------------------
-            # 1. ADIM: MotoCAP
+            # 1. ADIM: Üretici Resmi Sitesi (YENİ ÖZELLİK)
             # ---------------------------
             st.write("---")
-            st.markdown("### 1. 🧪 MotoCAP Laboratuvar Testi")
-            motocap_query = f"site:motocap.com.au {full_name}"
-            results, errors = search_ddg(motocap_query)
+            st.markdown("### 1. 🌏 Üretici Resmi Sitesi Taraması")
+            st.caption("Çinli/Hintli üreticilerin 'Certificate' sayfaları aranıyor...")
             
-            found = False
-            if results:
-                for res in results:
-                    if "motocap" in res.get('href', ''):
-                        st.success(f"✅ **Kayıt Bulundu:** [{res.get('title')}]({res.get('href')})")
-                        score += 50
-                        found = True
+            # Markanın resmi sitesindeki sertifika sayfasını bulmaya çalış
+            # Örn: "Scoyco official website certificate EN 13594"
+            official_query = f'{brand} motorcycle gloves official website certificate "EN 13594"'
+            results_off, _ = search_ddg(official_query, max_res=4)
+            
+            found_off = False
+            if results_off:
+                for res in results_off:
+                    title = res.get('title', '')
+                    link = res.get('href', '')
+                    # Eğer başlıkta Certificate veya CE geçiyorsa
+                    if "certif" in title.lower() or "declaration" in title.lower() or "ce" in title.lower():
+                        st.success(f"✅ **Üretici Belgesi Bulundu:** [{title}]({link})")
+                        score += 60 # Resmi siteden belge bulmak en güçlü kanıttır
+                        found_off = True
                         break
             
-            if not found:
-                st.warning("⚠️ Otomatik taramada sonuç alınamadı.")
+            if not found_off:
+                st.warning("⚠️ Üreticinin resmi sitesinde doğrudan bir sertifika sayfası bulunamadı.")
                 st.link_button(
-                    label="👉 Tıkla: MotoCAP Sonuçlarını Kendin Gör",
-                    url=create_google_link(motocap_query),
+                    label=f"👉 Tıkla: {brand} Resmi Sitesini Google'da Ara",
+                    url=create_google_link(f'{brand} official website motorcycle gloves'),
                     type="secondary"
                 )
 
             # ---------------------------
-            # 2. ADIM: PDF Belge
+            # 2. ADIM: Yerel Pazar (Trendyol, Hepsiburada vb.)
             # ---------------------------
             st.write("---")
-            st.markdown("### 2. 📄 Resmi Sertifika Belgesi (PDF)")
+            st.markdown("### 2. 🇹🇷 Türkiye Pazarı Taraması")
+            
+            tr_query = f'site:trendyol.com OR site:hepsiburada.com OR site:n11.com "{full_name}" "EN 13594"'
+            results_tr, errors = search_ddg(tr_query, max_res=5)
+            
+            found_tr = False
+            if results_tr:
+                for res in results_tr:
+                    title = res.get('title', '')
+                    link = res.get('href', '')
+                    st.success(f"✅ **Satıcı Beyanı (TR):** [{title}]({link})")
+                    if score < 60: score += 30 
+                    found_tr = True
+                    break
+            
+            if not found_tr:
+                st.info("ℹ️ Türkiye sitelerinde sertifika beyanı bulunamadı.")
+
+            # ---------------------------
+            # 3. ADIM: PDF Belge
+            # ---------------------------
+            st.write("---")
+            st.markdown("### 3. 📄 Resmi Belge (Global)")
+            
             doc_query = f"{brand} {model} declaration of conformity filetype:pdf"
-            results, errors = search_ddg(doc_query)
+            results, _ = search_ddg(doc_query)
             
             found_pdf = False
             if results:
                 for res in results:
                     if res.get('href', '').lower().endswith('.pdf'):
                         st.success(f"✅ **PDF Bulundu:** [{res.get('title')}]({res.get('href')})")
-                        score += 40
+                        if score < 60: score += 50
                         found_pdf = True
                         break
             
             if not found_pdf:
-                st.warning("⚠️ Otomatik taramada PDF yakalanamadı.")
-                st.link_button(
-                    label="👉 Tıkla: Resmi PDF Belgelerini Ara",
-                    url=create_google_link(doc_query),
-                    type="secondary"
-                )
+                st.info("ℹ️ Doğrudan PDF dosyası bulunamadı.")
 
-            # ---------------------------
-            # 3. ADIM: Mağaza Teyidi (YENİ)
-            # ---------------------------
-            st.write("---")
-            st.markdown("### 3. 🛍️ Güvenilir Mağaza Teyidi (FC-Moto & SBS)")
-            st.info("Avrupa yasaları gereği bu mağazalar sertifikasız ürüne 'Certified' yazamaz.")
-            
-            # FC-Moto Araması
-            fc_query = f"site:fc-moto.de {full_name} EN 13594"
-            results_fc, _ = search_ddg(fc_query)
-            
-            found_fc = False
-            if results_fc:
-                for res in results_fc:
-                    if "fc-moto" in res.get('href', ''):
-                        st.success(f"✅ **FC-Moto Kaydı:** [{res.get('title')}]({res.get('href')})")
-                        if score < 50: score += 20
-                        found_fc = True
-                        break
-            
-            if not found_fc:
-                st.markdown(f"[👉 FC-Moto'da Ara]({create_google_link(fc_query)})", unsafe_allow_html=True)
-
-            # SportsBikeShop Araması
-            sbs_query = f"site:sportsbikeshop.co.uk {full_name} CE certified"
-            results_sbs, _ = search_ddg(sbs_query)
-            
-            found_sbs = False
-            if results_sbs:
-                for res in results_sbs:
-                    if "sportsbikeshop" in res.get('href', ''):
-                        st.success(f"✅ **SportsBikeShop Kaydı:** [{res.get('title')}]({res.get('href')})")
-                        if score < 50: score += 20
-                        found_sbs = True
-                        break
-            
-            if not found_sbs:
-                st.markdown(f"[👉 SportsBikeShop'ta Ara]({create_google_link(sbs_query)})", unsafe_allow_html=True)
-
-            # ---------------------------
-            # 4. ADIM: Genel Kontrol
-            # ---------------------------
-            st.write("---")
-            st.markdown("### 4. 🌍 Genel İnceleme")
-            review_query = f"{full_name} motorcycle glove EN 13594 review"
-            st.link_button(
-                label="👉 Tıkla: İncelemeleri Google'da Gör",
-                url=create_google_link(review_query),
-                type="secondary"
-            )
-            
             status_container.update(label="İşlem Tamamlandı", state="complete", expanded=False)
             
             # ---------------------------
             # SONUÇ PUANI
             # ---------------------------
             st.divider()
-            if score > 0:
-                st.success(f"**Otomatik Sistem Güven Skoru: {score}/100**")
+            if score > 50:
+                st.balloons()
+                st.success(f"**Otomatik Sistem Güven Skoru: {score}/100 (GÜVENLİ)**\n\nResmi kaynaklarda sertifika izine rastlandı.")
+            elif score > 0:
+                st.warning(f"**Otomatik Sistem Güven Skoru: {score}/100 (ORTA)**\n\nSadece satıcı beyanları var. Lütfen etiketi kontrol edin.")
             else:
-                st.info("**Otomatik skor hesaplanamadı. Lütfen yukarıdaki '👉 Tıkla' butonlarını kullanarak doğrulayın.**")
+                st.error("**HİÇBİR VERİ BULUNAMADI**")
+                st.info("""
+                İnternette bu model için sertifika izi yok. Bu durum, düşük bütçeli markalarda yaygındır.
+                
+                👉 **En kesin çözüm: Yandaki '📷 Fotoğraf Analizi' sekmesine geçip etiketi okutun.**
+                """)
 
 
 # --- TAB 2: GÖRSEL ANALİZ ---
 with tab2:
-    st.info("Eldivenin etiketini yükleyin, yapay zeka okusun.")
+    st.info("Bilinmedik markalar için EN GÜVENİLİR YÖNTEM budur. Etiketin fotoğrafını çekip yükleyin.")
     uploaded_file = st.file_uploader("Resim Yükle", type=["jpg", "png", "jpeg"])
 
     if uploaded_file and st.button("🤖 AI İle Analiz Et"):
@@ -226,7 +207,7 @@ with tab2:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     img = Image.open(uploaded_file)
-                    prompt = "Bu motosiklet eldiveni etiketini analiz et. EN 13594 var mı? Level 1 mi 2 mi? KP var mı? Türkçe özetle."
+                    prompt = "Bu motosiklet eldiveni etiketini analiz et. EN 13594 var mı? Level 1 mi 2 mi? KP var mı? Ürün markası bilinmedik olsa bile etiketi güvenli duruyor mu? Türkçe özetle."
                     response = model.generate_content([prompt, img])
                     st.write(response.text)
                 except Exception as e:
