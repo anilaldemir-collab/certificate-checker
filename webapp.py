@@ -36,7 +36,10 @@ def search_ddg(query, max_res=3):
     return [], ["Bağlantı hatası"]
 
 def ask_ai_persona(api_key, persona, prompt, image=None):
-    """Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar. Hata durumunda yedek modellere geçer."""
+    """
+    Belirli bir uzmanlık alanına (persona) göre AI'ya soru sorar. 
+    Hata durumunda (404 vb.) otomatik olarak çalışan diğer modelleri dener.
+    """
     try:
         genai.configure(api_key=api_key)
         
@@ -48,29 +51,44 @@ def ask_ai_persona(api_key, persona, prompt, image=None):
         ANALİZ EDİLECEK: {prompt}
         """
         
-        # 1. Deneme: En güncel model (Gemini 1.5 Flash)
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            if image:
-                response = model.generate_content([full_prompt, image])
-            else:
-                response = model.generate_content(full_prompt)
-            return response.text
-            
-        except Exception:
-            # 2. Deneme: Eğer 1.5 Flash hata verirse (404 vs), kararlı eski modellere düş (Fallback)
-            if image:
-                # Görsel için eski vizyon modeli
-                fallback_model = genai.GenerativeModel('gemini-pro-vision')
-                response = fallback_model.generate_content([full_prompt, image])
-            else:
-                # Metin için eski pro modeli
-                fallback_model = genai.GenerativeModel('gemini-pro')
-                response = fallback_model.generate_content(full_prompt)
-            return response.text
+        # Denenecek Modeller Listesi (Sırasıyla dener)
+        # 1.5 Flash (En Hızlı/Yeni) -> 1.0 Pro (En Kararlı/Eski)
+        models_to_try = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro',
+            'gemini-pro' # En eski ve en yaygın model
+        ]
+        
+        last_error = ""
+        
+        for model_name in models_to_try:
+            try:
+                # Eski modellerde (gemini-pro) resim ve metin modelleri ayrıdır.
+                # Eğer resim varsa ve model 1.5 serisi değilse, 'vision' modelini seç.
+                current_model = model_name
+                if image and '1.5' not in model_name:
+                    current_model = 'gemini-pro-vision'
+                
+                model = genai.GenerativeModel(current_model)
+                
+                if image:
+                    response = model.generate_content([full_prompt, image])
+                else:
+                    response = model.generate_content(full_prompt)
+                
+                return response.text # Başarılı olursa cevabı dön ve çık
+                
+            except Exception as e:
+                # Bu model hata verdiyse kaydet ve sıradakine geç
+                last_error = str(e)
+                continue
+
+        # Döngü bitti ama hiçbiri çalışmadıysa:
+        return f"⚠️ Üzgünüm, yapay zeka modellerine erişilemedi. Hata: {last_error}"
 
     except Exception as e:
-        return f"Hata: {str(e)}"
+        return f"Kritik Hata: {str(e)}"
 
 # -----------------------------------------------------------------------------
 # KENAR ÇUBUĞU
