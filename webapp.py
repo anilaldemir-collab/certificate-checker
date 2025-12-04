@@ -12,7 +12,7 @@ import random
 st.set_page_config(page_title="Eldiven Dedektifi (Thinking AI)", page_icon="🏍️", layout="wide")
 
 # 1. Varsayılan Gemini Anahtarı (Kod içinde gömülü - Test için)
-default_gemini_key = "ApiKeyBuradaYerAlacak"
+default_gemini_key = "AIzaSyD-HpfQU8NwKM9PmzucKbNtVXoYwccIBUQ"
 
 # 2. Secrets Kontrolü (Sunucu ortamı için)
 api_key_from_secrets = None
@@ -76,10 +76,11 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
 
         if mode == "thinking":
             target_model = find_best_match(['thinking', 'pro', '1.5'])
-            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
+            # GÜNCELLEME: Prompt artık netlik ve kısalık üzerine kurulu
+            system_instruction = f"Sen '{persona}' rolünde bir uzmansın. Analizini derin yap ama cevabını SADECE SONUÇ ODAKLI, ÇOK KISA ve MADDELER halinde ver. Lafı uzatma. Kanıt yoksa 'Güvenli' deme."
         else:
             target_model = find_best_match(['flash', '1.5', 'pro'])
-            system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
+            system_instruction = f"Sen '{persona}' rolünde çok kısa ve net cevap veren bir asistansın. Gereksiz detay verme."
 
         if not target_model and available_models:
             target_model = available_models[0]
@@ -89,7 +90,6 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
 
         # 3. ADIM: Seçilen Model ile Üret
         try:
-            # Resim varsa ve model desteklemiyorsa vision model bul
             if image:
                 is_modern_multimodal = '1.5' in target_model or '2.0' in target_model
                 is_legacy_vision = 'vision' in target_model
@@ -103,6 +103,9 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
             
             full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nLütfen Türkçe cevap ver."
             
+            # Tutarlılık için sıcaklığı (temperature) düşürüyoruz
+            generation_config = genai.GenerationConfig(temperature=0.3)
+            
             safety_settings = [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -111,9 +114,9 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
             ]
 
             if image:
-                response = model.generate_content([full_prompt, image], safety_settings=safety_settings)
+                response = model.generate_content([full_prompt, image], safety_settings=safety_settings, generation_config=generation_config)
             else:
-                response = model.generate_content(full_prompt, safety_settings=safety_settings)
+                response = model.generate_content(full_prompt, safety_settings=safety_settings, generation_config=generation_config)
             
             return response.text
             
@@ -189,45 +192,41 @@ with tab1:
             # --- AI KONSEYİ: HAFIZA SORGUSU ---
             if active_api_key:
                 # 1. KONSEY BAŞKANI SKORU
-                with st.spinner("Konsey Başkanı genel güvenilirlik ihtimalini hesaplıyor..."):
+                with st.spinner("Konsey Başkanı hesaplıyor..."):
                     score_prompt = f"""
                     Sen Motosiklet Güvenlik Konseyi Başkanısın.
                     Ürün: {brand} {model}
-                    
-                    Bu ürünün EN 13594 sertifikasına sahip olma ve bu sertifikanın 'gerçek' olma ihtimalini (sahte olmama) analiz et.
-                    Marka bilinirliği, piyasadaki sahte ürün riski ve geçmiş verileri baz al.
-                    
-                    Lütfen cevabı tam olarak şu formatta ver:
-                    **Sertifika Güvenilirlik Skoru:** %XX
-                    **Kısa Karar:** Tek cümlelik özet (Örn: Güvenilir, Şüpheli, Bilinmiyor).
+                    Bu ürünün EN 13594 sertifikası gerçek mi?
+                    Cevabı SADECE şu formatta ver, başka bir şey yazma:
+                    **Güvenilirlik Skoru:** %XX
+                    **Kısa Karar:** (Tek cümle)
                     """
                     score_resp = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt, mode=selected_mode)
                 
-                st.info(f"📊 **Yapay Zeka Konseyi Ortak Kararı:**\n\n{score_resp}")
+                st.info(f"📊 **Başkanın Kararı:**\n\n{score_resp}")
 
                 # 2. DETAYLI KONSEY GÖRÜŞLERİ
                 st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi Detayları")
-                st.caption("Google'ın devasa veri bankası 3 farklı açıdan sorgulanıyor...")
                 c1, c2, c3 = st.columns(3)
                 
                 with c1:
                     st.info("📜 **Mevzuat Uzmanı**")
-                    with st.spinner("Yasal kayıtlar taranıyor..."):
-                        prompt_1 = f"""'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı? Kısa cevap ver."""
+                    with st.spinner("Yasal kayıtlar..."):
+                        prompt_1 = f"""'{brand} {model}' EN 13594 sertifikalı mı? Kesin kanıt var mı? Tek cümleyle cevapla."""
                         resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", prompt_1, mode=selected_mode)
                         st.write(resp)
 
                 with c2:
                     st.warning("🛠️ **Malzeme Mühendisi**")
-                    with st.spinner("Yapısal analiz yapılıyor..."):
-                        prompt_2 = f"""'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu? Kısa cevap ver."""
+                    with st.spinner("Yapısal analiz..."):
+                        prompt_2 = f"""'{brand} {model}' malzeme ve koruma kalitesi nasıl? Güvenli mi? Tek cümleyle özetle."""
                         resp = ask_gemini(active_api_key, "Tekstil Mühendisi", prompt_2, mode=selected_mode)
                         st.write(resp)
 
                 with c3:
                     st.error("🕵️ **Şüpheci Dedektif**")
-                    with st.spinner("Risk analizi yapılıyor..."):
-                        prompt_3 = f"""'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol. Kısa cevap ver."""
+                    with st.spinner("Risk analizi..."):
+                        prompt_3 = f"""'{brand} {model}' hakkında sahtecilik veya dayanıklılık şikayeti var mı? Tek cümleyle uyar."""
                         resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", prompt_3, mode=selected_mode)
                         st.write(resp)
             else:
@@ -284,45 +283,39 @@ with tab2:
             
             # --- GÖRSEL KONSEY BAŞKANI (YENİ EKLENDİ) ---
             st.divider()
-            with st.spinner("Konsey Başkanı görseli inceliyor ve güvenilirlik puanını hesaplıyor..."):
+            with st.spinner("Konsey Başkanı görseli inceliyor..."):
                 score_prompt_img = """
-                Sen Motosiklet Güvenlik Konseyi Başkanısın.
-                Bu görseli analiz et.
-                
-                1. Etiket varsa: EN 13594 kodu, CE işareti, Motosikletli Adam ikonu var mı? Gerçekçi duruyor mu?
-                2. Etiket yoksa: Ürünün dikiş kalitesi, malzeme yapısı (deri/kumaş) ve koruma parçaları profesyonel duruyor mu?
-                
-                Tüm görsel kanıtlara dayanerek bir GÜVEN SKORU ver.
-                
-                Lütfen cevabı tam olarak şu formatta ver:
+                Bu eldiven görselini analiz et.
+                EN 13594 etiketi var mı? Dikişler ve korumalar kaliteli mi?
+                Cevabı SADECE şu formatta ver:
                 **Görsel Güvenilirlik Skoru:** %XX
-                **Kısa Karar:** Tek cümlelik özet.
+                **Kısa Karar:** (Tek cümle)
                 """
                 score_resp_img = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt_img, img, mode=selected_mode)
             
-            st.info(f"📊 **Yapay Zeka Konseyi Görsel Kararı:**\n\n{score_resp_img}")
+            st.info(f"📊 **Başkanın Görsel Kararı:**\n\n{score_resp_img}")
             
             st.divider()
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.markdown("### 📜 Mevzuatçı")
-                with st.spinner("Etiket kodları okunuyor..."):
-                    prompt_img_1 = """Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı? Sadece önemli bulguları özetle."""
+                with st.spinner("Etiket okunuyor..."):
+                    prompt_img_1 = """Etikette EN 13594, CE, KP var mı? Yoksa neden yok? Tek cümleyle özetle."""
                     resp = ask_gemini(active_api_key, "Gümrük Denetçisi", prompt_img_1, img, mode=selected_mode)
                     st.info(resp)
             
             with col2:
                 st.markdown("### 🛠️ Mühendis")
-                with st.spinner("Dikiş ve malzeme inceleniyor..."):
-                    prompt_img_2 = """Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı? Kısa ve net teknik özet yap."""
+                with st.spinner("Malzeme inceleniyor..."):
+                    prompt_img_2 = """Malzeme (deri/file) ve dikişler kaza için güvenli mi? Tek cümleyle teknik yorum yap."""
                     resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", prompt_img_2, img, mode=selected_mode)
                 st.warning(resp)
             
             with col3:
                 st.markdown("### 🕵️ Dedektif")
-                with st.spinner("Piyasa araştırması..."):
-                    prompt_img_3 = """Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz? Kısa risk analizi yap."""
+                with st.spinner("Risk analizi..."):
+                    prompt_img_3 = """Bu ürün orijinal mi yoksa replika mı duruyor? Şüpheli bir durum var mı? Tek cümleyle uyar."""
                     resp = ask_gemini(active_api_key, "Sahte Ürün Uzmanı", prompt_img_3, img, mode=selected_mode)
                 st.error(resp)
             
