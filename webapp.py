@@ -65,11 +65,14 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
             ]
             system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
         else:
-            # Hızlı modeller listesi
+            # Hızlı modeller listesi - GENİŞLETİLDİ
+            # Flash çalışmazsa -> Pro 1.5 -> En eski Pro (Legacy)
             models_to_try = [
                 'gemini-1.5-flash', 
                 'gemini-1.5-flash-latest',
-                'gemini-1.5-flash-001'
+                'gemini-1.5-flash-001',
+                'gemini-1.5-pro', # Flash yoksa 1.5 Pro dene
+                'gemini-pro'      # Hiçbiri yoksa en eski kararlı sürümü dene
             ]
             system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
 
@@ -79,7 +82,13 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         
         for m_name in models_to_try:
             try:
-                model = genai.GenerativeModel(m_name)
+                # Eski modellerde (gemini-pro) görsel desteği 'gemini-pro-vision' adıyla ayrıdır.
+                # Eğer model 'gemini-pro' ise ve resim varsa, vision modeline çevir.
+                current_model_name = m_name
+                if image and m_name == 'gemini-pro':
+                    current_model_name = 'gemini-pro-vision'
+
+                model = genai.GenerativeModel(current_model_name)
                 
                 safety_settings = [
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -101,7 +110,7 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         if mode == "thinking":
             return f"⚠️ Düşünen modeller yoğun, Hızlı Mod deneniyor...\n\n" + ask_gemini(api_key, persona, prompt, image, mode="flash")
             
-        return f"Yapay Zeka Bağlantı Hatası: {last_err}"
+        return f"Yapay Zeka Bağlantı Hatası: Hiçbir model yanıt vermedi. (Son hata: {last_err})"
 
     except Exception as e:
         return f"Kritik Hata: {str(e)}"
