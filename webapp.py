@@ -79,7 +79,7 @@ def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
             target_model = available_models[0]
 
         # İçerik Hazırlama (Metin + Görseller)
-        full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nDEĞERLENDİRME KRİTERİ: EN 13594 veya CE Belgesi varsa 'UYGUN'.\n\nLütfen Türkçe cevap ver."
+        full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nLütfen Türkçe cevap ver."
         
         content_parts = [full_prompt]
         
@@ -145,7 +145,7 @@ st.markdown("""
 İkisinden biri varsa ürün güvenlik açısından **uygun** kabul edilir.
 """)
 
-tab1, tab2 = st.tabs(["🔍 İnternet Taraması", "📷 Fotoğraf Analizi (Çoklu)"])
+tab1, tab2 = st.tabs(["🔍 İnternet Taraması", "📷 Görsel Tanıma & Analiz (AI)"])
 
 # =============================================================================
 # TAB 1: İNTERNET TARAMASI
@@ -173,7 +173,10 @@ with tab1:
                     Sen Motosiklet Güvenlik Konseyisin. Ürün: '{brand} {model}'
                     
                     Aşağıdaki 4 farklı rolü AYNI ANDA canlandır ve birbirinizle TUTARLI cevaplar verin.
-                    Örneğin Mevzuatçı 'belge yok' derse, Başkan 'güvenli' diyemez.
+                    
+                    KRİTİK KURAL (BAŞKAN İÇİN):
+                    Eğer bu ürünün 'EN 13594' sertifikası VEYA 'CE Belgesi' olduğuna dair kesin bir bilgin/kaydın YOKSA, Güvenilirlik Skoru'nu KESİNLİKLE %0 VER.
+                    "Malzemesi iyi görünüyor" diye puan verme. Belge yoksa Puan = 0.
                     
                     1. KONSEY BAŞKANI: Genel güven skoru (%0-100) ve tek cümlelik nihai karar.
                     2. MEVZUAT UZMANI: EN 13594 sertifikası VEYA CE belgesi var mı? (Bilgi yoksa 'Veri yok' de).
@@ -198,7 +201,6 @@ with tab1:
                     
                     full_response = ask_gemini(active_api_key, "Motosiklet Güvenlik Konseyi", council_prompt, mode=selected_mode)
                     
-                    # Cevabı parçala ve dağıt
                     try:
                         parts = full_response.split('[')
                         p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
@@ -209,7 +211,11 @@ with tab1:
                             elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                             elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                         
-                        st.info(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                        score_color = "red"
+                        if "%0" in p_baskan or " 0" in p_baskan:
+                            st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                        else:
+                            st.info(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
                         
                         c1, c2, c3 = st.columns(3)
                         with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
@@ -257,49 +263,59 @@ with tab1:
             status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
 
 # =============================================================================
-# TAB 2: FOTOĞRAF ANALİZİ (ÇOKLU FOTOĞRAF)
+# TAB 2: FOTOĞRAF ANALİZİ (GÖRSEL TANIMA & ÇOKLU FOTOĞRAF)
 # =============================================================================
 with tab2:
     if not active_api_key:
         st.warning("⚠️ Konsey Modu için API Anahtarı şarttır.")
     else:
-        st.success("✅ **Konsey Hazır:** Birden fazla fotoğraf yükleyerek en kesin sonucu alabilirsiniz.")
+        st.success("✅ **Konsey Hazır:** Etiket yoksa bile ürünün modelini görselden tanıyabilirim.")
         
         st.info("""
-        📸 **ÖNERİLEN FOTOĞRAFLAR (Minimum 3 Adet):**
-        1. **Eldivenin Dış Yüzü:** Yumruk korumasını (Knuckle) net gösteren açı.
-        2. **Avuç İçi:** Sürtünme bölgelerini ve dikişleri gösteren açı.
-        3. **İç Etiket:** Üzerindeki yazıların okunabildiği etiket fotoğrafı.
+        📸 **ÖNERİLEN FOTOĞRAFLAR (En az 3 adet yüklemeniz önerilir):**
+        1. **Eldivenin Dış Yüzü:** Modeli ve markayı tanımak için.
+        2. **Avuç İçi:** Sürtünme bölgelerini ve dikişleri görmek için.
+        3. **İç Etiket:** Varsa sertifika kodunu okumak için.
         """)
         
-        uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim Yapabilirsiniz)", 
+        uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim)", 
                                           type=["jpg", "png", "jpeg", "webp"], 
                                           accept_multiple_files=True)
 
-        if uploaded_files and st.button("🤖 Konseyi Topla ve Analiz Et"):
+        if uploaded_files and st.button("🤖 Ürünü Tanı ve Analiz Et"):
             image_list = []
             for file in uploaded_files:
                 image_list.append(Image.open(file))
             
-            st.image(image_list, caption=[f"Fotoğraf {i+1}" for i in range(len(image_list))], width=200)
+            st.image(image_list, caption=[f"Fotoğraf {i+1}" for i in range(len(image_list))], width=150)
             
             st.divider()
             
-            with st.spinner(f"Konsey Başkanı ve Üyeler {len(image_list)} fotoğrafı TEK OTURUMDA inceliyor..."):
+            with st.spinner(f"Konsey Başkanı görselleri tarıyor ve ürünü tanımaya çalışıyor..."):
                 council_prompt_img = """
-                Sen Motosiklet Güvenlik Konseyisin. BU FOTOĞRAFLARIN HEPSİNİ bir bütün olarak analiz et.
-                Kendi içinde tutarlı ol.
+                Sen Motosiklet Güvenlik Konseyisin. Yüklenen fotoğrafları detaylıca incele.
                 
-                1. KONSEY BAŞKANI: Genel güven skoru (%0-100) ve tek cümlelik nihai karar.
-                2. MEVZUAT UZMANI: Etiketlerde 'EN 13594' kodu VEYA 'CE' işareti var mı?
-                3. MALZEME MÜHENDİSİ: Ürünün kalitesi, dikişleri ve koruma yapısı 'Sertifikalı bir ürün' gibi güven veriyor mu?
-                4. ŞÜPHECİ DEDEKTİF: Replika (çakma) olma ihtimali var mı?
+                GÖREV 1: ÜRÜN TANIMA (Visual Recognition)
+                - Fotoğraftaki eldiven hangi marka ve modele benziyor? (Örn: "Bu tasarım %90 ihtimalle Revit Sand 4 modelidir" veya "Bu ürün Scoyco MC29'a benziyor").
+                - Eğer etiket yoksa bile, görsel hafızanı kullanarak ürünü teşhis et.
                 
-                Lütfen cevabı TAM OLARAK aşağıdaki formatta ve başlıklarla ver (Başlıkları değiştirme):
+                GÖREV 2: SERTİFİKA ANALİZİ
+                - Bulduğun/Tanıdığın bu modelin orijinalinde 'EN 13594' veya 'CE' sertifikası var mı?
+                - Fotoğraflarda fiziksel bir etiket kanıtı var mı?
+                
+                GÖREV 3: PUANLAMA KURALLARI
+                - Etikette 'EN 13594' veya 'CE' açıkça görünüyorsa -> Yüksek Puan.
+                - Etiket YOK ama ürün bilindik, sertifikalı bir modelin orijinaline çok benziyorsa -> Orta Puan (Orijinal ise sertifikalıdır notu düş).
+                - Etiket YOK ve ürün replika/kalitesiz duruyorsa -> %0 Puan.
+                
+                Lütfen cevabı TAM OLARAK aşağıdaki formatta ver:
+                
+                [TANI]
+                **Tespit Edilen Ürün:** (Marka Model Tahmini ve % İhtimal)
                 
                 [BAŞKAN]
                 **Görsel Güvenilirlik Skoru:** %XX
-                **Kısa Karar:** ...
+                **Karar Özeti:** ...
                 
                 [MEVZUAT]
                 ...
@@ -314,16 +330,27 @@ with tab2:
                 
                 try:
                     parts = full_resp_img.split('[')
-                    p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+                    p_tani, p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Tanı Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
                     
                     for p in parts:
-                        if p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
+                        if p.startswith("TANI]"): p_tani = p.replace("TANI]", "").strip()
+                        elif p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
                         elif p.startswith("MEVZUAT]"): p_mevzuat = p.replace("MEVZUAT]", "").strip()
                         elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                         elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                     
-                    st.info(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                    # 1. Ürün Tanıma Sonucu (Mavi Kutu)
+                    st.info(f"🔍 **Görsel Tanıma Sonucu:**\n\n{p_tani}")
                     
+                    # 2. Başkanın Kararı (Skora göre renkli)
+                    if "%0" in p_baskan or " 0" in p_baskan or "Düşük" in p_baskan:
+                        st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                    else:
+                        st.success(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                    
+                    st.divider()
+                    
+                    # 3. Uzman Görüşleri
                     c1, c2, c3 = st.columns(3)
                     with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
                     with c2: st.warning(f"🛠️ **Malzeme Mühendisi**\n\n{p_muhendis}")
