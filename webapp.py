@@ -34,16 +34,58 @@ def create_google_images_link(query):
     return f"https://www.google.com/search?tbm=isch&q={encoded_query}"
 
 @st.cache_data(show_spinner=False)
-def search_ddg(query, max_res=3):
+def search_ddg_global(query, max_res=5):
+    """
+    Dünya genelinde (Region: wt-wt) detaylı arama yapar.
+    Birden fazla backend deneyerek engelleri aşmaya çalışır.
+    """
     backends = ['api', 'html', 'lite'] 
     for backend in backends:
         try:
-            time.sleep(random.uniform(0.3, 1.0))
+            time.sleep(random.uniform(0.5, 1.5)) # Robot yakalanmamak için bekleme
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_res, backend=backend))
+                # region='wt-wt' -> World Wide (Tüm Dünya)
+                results = list(ddgs.text(query, region='wt-wt', max_results=max_res, backend=backend))
                 if results: return results, None
         except: continue
     return [], ["Bağlantı hatası"]
+
+def deep_research_product(product_name):
+    """
+    Ürün için birden fazla teknik terimle çapraz arama yapar ve sonuçları birleştirir.
+    """
+    # Farklı teknik terimlerle arama varyasyonları
+    search_variations = [
+        f"{product_name} EN 13594 certificate filetype:pdf",      # PDF Sertifika
+        f"{product_name} declaration of conformity",               # Uygunluk Beyanı
+        f"{product_name} technical data sheet motorcycle glove",    # Teknik Veri
+        f"{product_name} CE certification documents",              # CE Belgeleri
+        f'site:motocap.com.au "{product_name}"'                   # MotoCAP Veritabanı
+    ]
+    
+    all_findings = []
+    seen_links = set()
+    
+    progress_bar = st.progress(0)
+    
+    for i, query in enumerate(search_variations):
+        results, _ = search_ddg_global(query, max_res=3)
+        if results:
+            for res in results:
+                link = res.get('href', '')
+                if link not in seen_links:
+                    seen_links.add(link)
+                    all_findings.append(f"- [{res.get('title')}]({link}): {res.get('body')}")
+        
+        # İlerleme çubuğunu güncelle
+        progress_bar.progress((i + 1) / len(search_variations))
+        
+    progress_bar.empty() # Çubuğu gizle
+    
+    if not all_findings:
+        return "Detaylı küresel taramada doğrudan bir belgeye rastlanmadı."
+    
+    return "\n".join(all_findings[:10]) # En alakalı 10 sonucu döndür
 
 # --- GELİŞMİŞ GOOGLE GEMINI FONKSİYONU ---
 def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
@@ -161,31 +203,42 @@ with tab1:
     with col2:
         model = st.text_input("Model", placeholder="Örn: MC29")
     
-    if st.button("🔍 Analiz Et", type="primary"):
+    if st.button("🔍 Küresel Araştırma Başlat", type="primary"):
         if not brand or not model:
             st.error("Marka ve Model giriniz.")
         else:
             full_name = f"{brand} {model}"
             
-            # --- AI KONSEYİ: TEK OTURUM (Tutarlılık İçin) ---
+            # --- AI KONSEYİ: TEK OTURUM ---
             if active_api_key:
                 st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi")
-                st.caption("Veriler tek bir oturumda, tutarlı bir şekilde analiz ediliyor...")
                 
-                with st.spinner("Konsey toplanıyor ve ortak karar veriyor..."):
+                # DERİN ARAŞTIRMA (INTERNET)
+                with st.status(f"🌍 Dünya genelinde '{full_name}' belgeleri taranıyor...", expanded=True) as status_box:
+                    st.write("PDF Sertifikalar aranıyor...")
+                    internet_findings = deep_research_product(full_name)
+                    st.write("Teknik Veri Sayfaları kontrol ediliyor...")
+                    # Biraz gecikme ekleyerek kullanıcının işlemi görmesini sağlıyoruz
+                    time.sleep(0.5) 
+                    st.write("Veriler toparlanıyor...")
+                    status_box.update(label="Küresel Tarama Tamamlandı", state="complete", expanded=False)
+
+                st.divider()
+                st.caption("Toplanan veriler Konsey tarafından analiz ediliyor...")
+                
+                with st.spinner("Konsey Kararı Hazırlanıyor..."):
                     council_prompt = f"""
                     Sen Motosiklet Güvenlik Konseyisin. Ürün: '{brand} {model}'
                     
                     Aşağıdaki 4 farklı rolü AYNI ANDA canlandır ve birbirinizle TUTARLI cevaplar verin.
                     
-                    KRİTİK KURAL (BAŞKAN İÇİN):
-                    Eğer bu ürünün 'EN 13594' sertifikası VEYA 'CE Belgesi' olduğuna dair kesin bir bilgin/kaydın YOKSA, Güvenilirlik Skoru'nu KESİNLİKLE %0 VER.
-                    "Malzemesi iyi görünüyor" diye puan verme. Belge yoksa Puan = 0.
+                    GİRDİLER (İNTERNET BULGULARI):
+                    {internet_findings}
                     
-                    1. KONSEY BAŞKANI: Genel güven skoru (%0-100) ve tek cümlelik nihai karar.
-                    2. MEVZUAT UZMANI: EN 13594 sertifikası VEYA CE belgesi var mı? (Bilgi yoksa 'Veri yok' de).
-                    3. MALZEME MÜHENDİSİ: Malzeme koruması yeterli mi?
-                    4. ŞÜPHECİ DEDEKTİF: Sahtecilik riski veya kronik sorun var mı?
+                    KRİTİK DEĞERLENDİRME KURALI (BAŞKAN İÇİN):
+                    1. BULGULARDA KANIT VARSA: İnternet bulgularında 'Certificate', 'Declaration of Conformity', 'EN 13594' geçen bir PDF veya resmi sayfa varsa -> %100 GÜVENİLİR.
+                    2. İÇ BİLGİ (KNOWLEDGE): Bulgularda yoksa bile, sen bu markanın (Örn: {brand}) Avrupa standartlarında üretim yaptığını biliyorsan -> %80-90 GÜVENİLİR.
+                    3. BELİRSİZLİK: Hem bulgu yok hem de marka bilinmiyorsa -> %0 VER.
                     
                     Lütfen cevabı TAM OLARAK aşağıdaki formatta ve başlıklarla ver (Başlıkları değiştirme):
                     
@@ -215,6 +268,7 @@ with tab1:
                             elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                             elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                         
+                        score_color = "red"
                         if "%0" in p_baskan or " 0" in p_baskan:
                             st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
                         else:
@@ -231,39 +285,10 @@ with tab1:
             else:
                 st.warning("AI Hafıza sorgusu için anahtar gerekli.")
             
-            st.divider()
-            
-            # --- KLASİK ARAMA ---
-            status_container = st.status("🕵️ İnternet Taranıyor...", expanded=True)
-            
-            # 1. PDF Belge
-            st.markdown("### 1. 📄 Resmi Belge (EN 13594 veya CE)")
-            auto_query = f"{brand} {model} certificate EN 13594 OR CE Declaration of Conformity filetype:pdf"
-            results_auto, _ = search_ddg(auto_query, max_res=3)
-            
-            if results_auto:
-                for res in results_auto:
-                    st.success(f"✅ **Belge Bulundu:** [{res.get('title')}]({res.get('href')})")
-            else:
-                st.warning("⚠️ Otomatik PDF bulunamadı.")
-                st.link_button("👉 Manuel PDF Ara", create_google_link(auto_query))
-
-            # 2. Forumlar
-            st.write("---")
-            st.markdown("### 2. 🗣️ Kullanıcı Yorumları")
-            forum_query = f'{full_name} motosiklet eldiveni yorum şikayet forum'
-            results_forum, _ = search_ddg(forum_query, max_res=4)
-            
-            if results_forum:
-                for res in results_forum:
-                    if any(x in res.get('href', '') for x in ['forum', 'sikayet', 'eksi', 'donanimhaber', 'technopat', 'reddit']):
-                        st.info(f"🗨️ **Tartışma:** [{res.get('title')}]({res.get('href')})")
-                    else:
-                        st.caption(f"Sonuç: [{res.get('title')}]({res.get('href')})")
-            else:
-                st.caption("Forum sonucu yok.")
-
-            status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
+            # Bulunan linkleri göster
+            if "internet_findings" in locals() and len(internet_findings) > 50:
+                with st.expander("🌍 Bulunan Küresel Kaynaklar (Detay)"):
+                    st.markdown(internet_findings)
 
 # =============================================================================
 # TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> KONTROL ET -> ANALİZ ET)
@@ -283,7 +308,7 @@ with tab2:
         if "lens_step" not in st.session_state: st.session_state.lens_step = 1
         if "lens_ai_guess" not in st.session_state: st.session_state.lens_ai_guess = ""
         if "lens_manual_mode" not in st.session_state: st.session_state.lens_manual_mode = False
-        if "rejected_guesses" not in st.session_state: st.session_state.rejected_guesses = [] # YENİ: Reddedilen tahminler listesi
+        if "rejected_guesses" not in st.session_state: st.session_state.rejected_guesses = [] 
         
         uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim)", 
                                           type=["jpg", "png", "jpeg", "webp"], 
@@ -384,21 +409,14 @@ with tab2:
                 st.divider()
                 st.subheader(f"🔍 '{confirmed_name}' Analiz Ediliyor...")
                 
-                # 1. İNTERNET ARAŞTIRMASI
+                # 1. DERİN İNTERNET ARAŞTIRMASI (Global)
                 found_evidence = "İnternette ek belge bulunamadı."
-                with st.status(f"🌐 İnternet taranıyor...", expanded=False) as status_search:
+                with st.status(f"🌐 Küresel veritabanları taranıyor...", expanded=True) as status_search:
                     if "Bilinmeyen" not in confirmed_name:
-                        cert_query = f"{confirmed_name} EN 13594 certificate pdf"
-                        search_results, _ = search_ddg(cert_query, max_res=3)
-                        
-                        evidence_links = []
-                        if search_results:
-                            for res in search_results:
-                                evidence_links.append(f"- {res.get('title')}: {res.get('href')}")
-                            found_evidence = "\n".join(evidence_links)
-                        else:
-                            st.warning("İnternette doğrudan belge bulunamadı.")
-                    status_search.update(label="İnternet Taraması Bitti", state="complete")
+                        # Burada yeni deep_research fonksiyonunu kullanıyoruz
+                        found_evidence = deep_research_product(confirmed_name)
+                    
+                    status_search.update(label="Küresel Tarama Bitti", state="complete", expanded=False)
 
                 # 2. KONSEY ANALİZİ
                 with st.spinner(f"Konsey Başkanı verileri birleştiriyor..."):
