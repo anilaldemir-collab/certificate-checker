@@ -29,6 +29,10 @@ def create_google_link(query):
     encoded_query = urllib.parse.quote(query)
     return f"https://www.google.com/search?q={encoded_query}"
 
+def create_google_images_link(query):
+    encoded_query = urllib.parse.quote(query)
+    return f"https://www.google.com/search?tbm=isch&q={encoded_query}"
+
 @st.cache_data(show_spinner=False)
 def search_ddg(query, max_res=3):
     backends = ['api', 'html', 'lite'] 
@@ -355,7 +359,6 @@ with tab2:
                     
                     image_list = [Image.open(f) for f in uploaded_files]
                     
-                    # ÇAPRAZ KONTROL PROMPT'U
                     council_prompt_img = f"""
                     Sen Motosiklet Güvenlik Konseyisin. 
                     
