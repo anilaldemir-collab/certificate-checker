@@ -11,8 +11,17 @@ import random
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="Eldiven Dedektifi (Thinking AI)", page_icon="🏍️", layout="wide")
 
-# Varsayılan Gemini Anahtarı (Kod içinde gömülü)
+# 1. Varsayılan Gemini Anahtarı (Kod içinde gömülü - Test için)
 default_gemini_key = "AIzaSyD-HpfQU8NwKM9PmzucKbNtVXoYwccIBUQ"
+
+# 2. Secrets Kontrolü (Sunucu ortamı için)
+api_key_from_secrets = None
+try:
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key_from_secrets = st.secrets["GOOGLE_API_KEY"]
+except FileNotFoundError:
+    # Lokal çalışmada secrets dosyası yoksa hata vermemesi için
+    pass
 
 # -----------------------------------------------------------------------------
 # YARDIMCI FONKSİYONLAR
@@ -123,14 +132,14 @@ with st.sidebar:
         active_api_key = api_key_from_secrets
     else:
         st.warning("⚠️ AI Analizi için Anahtar Gerekli")
-        user_key = st.text_input("Google API Key", type="password", placeholder="Anahtarınızı buraya yapıştırın")
+        # Varsayılan olarak gömülü anahtarı önerelim ama kullanıcının değiştirmesine izin verelim
+        user_key = st.text_input("Google API Key", value=default_gemini_key, type="password")
+        
         if user_key:
             active_api_key = user_key
-            st.success("Anahtar tanımlandı!")
+            st.success("Anahtar aktif!")
         else:
-            # Eğer kullanıcı girmezse varsayılan gömülü anahtarı kullan (Test için)
-            active_api_key = default_gemini_key
-            st.info("Otomatik test anahtarı kullanılıyor.")
+            st.markdown("[👉 Ücretsiz API Anahtarı Almak İçin Tıkla](https://aistudio.google.com/app/apikey)")
 
     st.divider()
     st.markdown("### 🔗 Hızlı Linkler")
