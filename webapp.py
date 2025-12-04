@@ -79,7 +79,8 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         if mode == "thinking":
             # Düşünme modu için öncelik: Thinking > Pro
             target_model = find_best_match(['thinking', 'pro', '1.5'])
-            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
+            # GÜNCELLEME: Prompt artık kısa ve öz cevap istiyor
+            system_instruction = f"Sen '{persona}' rolünde, derinlemesine analiz yapan ancak sonucunu çok KISA, NET ve ÖZET maddeler halinde sunan bir uzmansın. Laf kalabalığı yapma, sadece kritik tespitleri yaz."
         else:
             # Hızlı mod için öncelik: Flash > 1.5 > Pro
             target_model = find_best_match(['flash', '1.5', 'pro'])
@@ -223,7 +224,7 @@ with tab1:
                     st.info("📜 **Mevzuat Uzmanı**")
                     with st.spinner("Yasal kayıtlar taranıyor..."):
                         # Üç tırnak kullanarak string hatasını önledik
-                        prompt_1 = f"""'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı?"""
+                        prompt_1 = f"""'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı? Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", prompt_1, mode=selected_mode)
                         st.write(resp)
 
@@ -231,7 +232,7 @@ with tab1:
                     st.warning("🛠️ **Malzeme Mühendisi**")
                     with st.spinner("Yapısal analiz yapılıyor..."):
                         # Üç tırnak kullanımı
-                        prompt_2 = f"""'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu?"""
+                        prompt_2 = f"""'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu? Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Tekstil Mühendisi", prompt_2, mode=selected_mode)
                         st.write(resp)
 
@@ -239,7 +240,7 @@ with tab1:
                     st.error("🕵️ **Şüpheci Dedektif**")
                     with st.spinner("Risk analizi yapılıyor..."):
                         # Üç tırnak kullanımı
-                        prompt_3 = f"""'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol."""
+                        prompt_3 = f"""'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol. Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", prompt_3, mode=selected_mode)
                         st.write(resp)
             else:
@@ -296,7 +297,7 @@ with tab2:
                 st.markdown("### 📜 Mevzuatçı")
                 with st.spinner("Etiket kodları okunuyor..."):
                     # Üç tırnak kullanımı
-                    prompt_img_1 = """Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?"""
+                    prompt_img_1 = """Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı? Sadece önemli bulguları özetle."""
                     resp = ask_gemini(active_api_key, "Gümrük Denetçisi", prompt_img_1, img, mode=selected_mode)
                     st.info(resp)
             
@@ -304,7 +305,7 @@ with tab2:
                 st.markdown("### 🛠️ Mühendis")
                 with st.spinner("Dikiş ve malzeme inceleniyor..."):
                     # Üç tırnak kullanımı
-                    prompt_img_2 = """Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı?"""
+                    prompt_img_2 = """Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı? Kısa ve net teknik özet yap."""
                     resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", prompt_img_2, img, mode=selected_mode)
                 st.warning(resp)
             
@@ -312,7 +313,7 @@ with tab2:
                 st.markdown("### 🕵️ Dedektif")
                 with st.spinner("Piyasa araştırması..."):
                     # Üç tırnak kullanımı
-                    prompt_img_3 = """Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz?"""
+                    prompt_img_3 = """Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz? Kısa risk analizi yap."""
                     resp = ask_gemini(active_api_key, "Sahte Ürün Uzmanı", prompt_img_3, img, mode=selected_mode)
                 st.error(resp)
             
