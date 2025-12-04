@@ -12,7 +12,6 @@ import random
 st.set_page_config(page_title="Eldiven Dedektifi (Thinking AI)", page_icon="🏍️", layout="wide")
 
 # Varsayılan Gemini Anahtarı (Kod içinde gömülü)
-# NOT: Kendi güvenliğiniz için bu anahtarı production ortamında environment variable olarak kullanın.
 default_gemini_key = "AIzaSyD-HpfQU8NwKM9PmzucKbNtVXoYwccIBUQ"
 
 # -----------------------------------------------------------------------------
@@ -38,29 +37,30 @@ def search_ddg(query, max_res=3):
 def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
     """
     mode: 'flash' (Hızlı) veya 'thinking' (Akıl Yürütme)
+    Hata durumunda (404 Not Found) otomatik olarak eski/kararlı modellere düşer.
     """
     try:
         genai.configure(api_key=api_key)
         
-        # Model Seçim Mantığı
+        # Model Seçim Mantığı ve Yedek Listeleri
         if mode == "thinking":
-            # Düşünen/Güçlü modeller listesi (Öncelik sırasına göre)
-            # 1. Gemini 2.0 Thinking (Deneysel - Çok zeki)
-            # 2. Gemini 1.5 Pro (Kararlı - Zeki)
+            # Düşünen Modeller: En zekiden en kararlıya
             models_to_try = [
-                'gemini-2.0-flash-thinking-exp-01-21', # Yeni nesil düşünen model
+                'gemini-2.0-flash-thinking-exp-01-21', 
                 'gemini-2.0-flash-thinking-exp',       
                 'gemini-1.5-pro-latest',
                 'gemini-1.5-pro',
                 'gemini-1.5-pro-001'
             ]
-            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
+            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen ve detaylı analiz yapan bir uzmansın."
         else:
-            # Hızlı modeller listesi
+            # Hızlı Modeller: Hızlıdan en uyumluya (Gemini Pro eklendi)
             models_to_try = [
                 'gemini-1.5-flash', 
                 'gemini-1.5-flash-latest',
-                'gemini-1.5-flash-001'
+                'gemini-1.5-flash-001',
+                'gemini-1.5-pro', # Flash yoksa Pro kullan
+                'gemini-pro'      # O da yoksa en eski kararlı sürümü kullan
             ]
             system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
 
@@ -70,9 +70,14 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         
         for m_name in models_to_try:
             try:
-                model = genai.GenerativeModel(m_name)
+                # Eski modellerde (gemini-pro) görsel desteği 'gemini-pro-vision' adıyla ayrıdır.
+                current_model_name = m_name
+                if image and m_name == 'gemini-pro':
+                    current_model_name = 'gemini-pro-vision'
+
+                model = genai.GenerativeModel(current_model_name)
                 
-                # Güvenlik ayarlarını biraz gevşetelim ki teknik analizleri engellemesin
+                # Güvenlik ayarlarını gevşet (Teknik analiz engellenmesin)
                 safety_settings = [
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -88,13 +93,13 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
                 return response.text
             except Exception as e:
                 last_err = str(e)
-                continue
+                continue # Bu model çalışmadıysa sıradakine geç
                 
-        # Hiçbiri çalışmazsa Flash'a düş (Fallback)
+        # Hiçbiri çalışmazsa ve mod 'thinking' ise Flash moduna düş (Son Çare)
         if mode == "thinking":
-            return f"⚠️ Düşünen modeller yoğun, Hızlı Mod devreye girdi.\n\n" + ask_gemini(api_key, persona, prompt, image, mode="flash")
+            return f"⚠️ Düşünen modeller yoğun, Hızlı Mod devreye girdi...\n\n" + ask_gemini(api_key, persona, prompt, image, mode="flash")
             
-        return f"Yapay Zeka Bağlantı Hatası: {last_err}"
+        return f"Yapay Zeka Bağlantı Hatası: Hiçbir model yanıt vermedi. (Son hata: {last_err})"
 
     except Exception as e:
         return f"Kritik Hata: {str(e)}"
