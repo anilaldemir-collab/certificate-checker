@@ -196,9 +196,27 @@ with tab1:
             full_name = f"{brand} {model}"
             
             # --- AI KONSEYİ: HAFIZA SORGUSU ---
-            st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi")
             if active_api_key:
-                st.caption("Google'ın devasa veri bankası sorgulanıyor...")
+                # 1. KONSEY BAŞKANI SKORU
+                with st.spinner("Konsey Başkanı genel güvenilirlik ihtimalini hesaplıyor..."):
+                    score_prompt = f"""
+                    Sen Motosiklet Güvenlik Konseyi Başkanısın.
+                    Ürün: {brand} {model}
+                    
+                    Bu ürünün EN 13594 sertifikasına sahip olma ve bu sertifikanın 'gerçek' olma ihtimalini (sahte olmama) analiz et.
+                    Marka bilinirliği, piyasadaki sahte ürün riski ve geçmiş verileri baz al.
+                    
+                    Lütfen cevabı tam olarak şu formatta ver:
+                    **Sertifika Güvenilirlik Skoru:** %XX
+                    **Kısa Karar:** Tek cümlelik özet (Örn: Güvenilir, Şüpheli, Bilinmiyor).
+                    """
+                    score_resp = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt, mode=selected_mode)
+                
+                st.info(f"📊 **Yapay Zeka Konseyi Ortak Kararı:**\n\n{score_resp}")
+
+                # 2. DETAYLI KONSEY GÖRÜŞLERİ
+                st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi Detayları")
+                st.caption("Google'ın devasa veri bankası 3 farklı açıdan sorgulanıyor...")
                 c1, c2, c3 = st.columns(3)
                 
                 with c1:
