@@ -34,58 +34,42 @@ def create_google_images_link(query):
     return f"https://www.google.com/search?tbm=isch&q={encoded_query}"
 
 @st.cache_data(show_spinner=False)
-def search_ddg_global(query, max_res=5):
-    """
-    Dünya genelinde (Region: wt-wt) detaylı arama yapar.
-    Birden fazla backend deneyerek engelleri aşmaya çalışır.
-    """
+def search_ddg(query, max_res=3):
     backends = ['api', 'html', 'lite'] 
     for backend in backends:
         try:
-            time.sleep(random.uniform(0.5, 1.5)) # Robot yakalanmamak için bekleme
+            time.sleep(random.uniform(0.3, 1.0))
             with DDGS() as ddgs:
-                # region='wt-wt' -> World Wide (Tüm Dünya)
-                results = list(ddgs.text(query, region='wt-wt', max_results=max_res, backend=backend))
+                results = list(ddgs.text(query, max_results=max_res, backend=backend))
                 if results: return results, None
         except: continue
     return [], ["Bağlantı hatası"]
 
-def deep_research_product(product_name):
+def multi_search_product(product_name):
     """
-    Ürün için birden fazla teknik terimle çapraz arama yapar ve sonuçları birleştirir.
+    Ürün için 3 farklı koldan arama yapar ve sonuçları birleştirir.
+    Böylece PDF yoksa bile inceleme veya resmi site verisi yakalanır.
     """
-    # Farklı teknik terimlerle arama varyasyonları
-    search_variations = [
-        f"{product_name} EN 13594 certificate filetype:pdf",      # PDF Sertifika
-        f"{product_name} declaration of conformity",               # Uygunluk Beyanı
-        f"{product_name} technical data sheet motorcycle glove",    # Teknik Veri
-        f"{product_name} CE certification documents",              # CE Belgeleri
-        f'site:motocap.com.au "{product_name}"'                   # MotoCAP Veritabanı
+    search_strategies = [
+        f"{product_name} EN 13594 certificate filetype:pdf",  # 1. Resmi Belge (PDF)
+        f"{product_name} motorcycle glove review CE rating",   # 2. İncelemeler ve Puanlar
+        f'site:motocap.com.au "{product_name}"',              # 3. MotoCAP Testi
+        f"{product_name} official site specifications"         # 4. Resmi Site Özellikleri
     ]
     
-    all_findings = []
+    combined_results = []
     seen_links = set()
     
-    progress_bar = st.progress(0)
-    
-    for i, query in enumerate(search_variations):
-        results, _ = search_ddg_global(query, max_res=3)
+    for query in search_strategies:
+        results, _ = search_ddg(query, max_res=2)
         if results:
             for res in results:
                 link = res.get('href', '')
                 if link not in seen_links:
                     seen_links.add(link)
-                    all_findings.append(f"- [{res.get('title')}]({link}): {res.get('body')}")
-        
-        # İlerleme çubuğunu güncelle
-        progress_bar.progress((i + 1) / len(search_variations))
-        
-    progress_bar.empty() # Çubuğu gizle
-    
-    if not all_findings:
-        return "Detaylı küresel taramada doğrudan bir belgeye rastlanmadı."
-    
-    return "\n".join(all_findings[:10]) # En alakalı 10 sonucu döndür
+                    combined_results.append(f"- [{res.get('title')}]({link}): {res.get('body')}")
+                    
+    return "\n".join(combined_results) if combined_results else "İnternet taramasında spesifik veri bulunamadı."
 
 # --- GELİŞMİŞ GOOGLE GEMINI FONKSİYONU ---
 def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
@@ -203,42 +187,35 @@ with tab1:
     with col2:
         model = st.text_input("Model", placeholder="Örn: MC29")
     
-    if st.button("🔍 Küresel Araştırma Başlat", type="primary"):
+    if st.button("🔍 Analiz Et", type="primary"):
         if not brand or not model:
             st.error("Marka ve Model giriniz.")
         else:
             full_name = f"{brand} {model}"
             
-            # --- AI KONSEYİ: TEK OTURUM ---
+            # --- AI KONSEYİ: TEK OTURUM (Tutarlılık İçin) ---
             if active_api_key:
                 st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi")
+                st.caption("Veriler tek bir oturumda, tutarlı bir şekilde analiz ediliyor...")
                 
-                # DERİN ARAŞTIRMA (INTERNET)
-                with st.status(f"🌍 Dünya genelinde '{full_name}' belgeleri taranıyor...", expanded=True) as status_box:
-                    st.write("PDF Sertifikalar aranıyor...")
-                    internet_findings = deep_research_product(full_name)
-                    st.write("Teknik Veri Sayfaları kontrol ediliyor...")
-                    # Biraz gecikme ekleyerek kullanıcının işlemi görmesini sağlıyoruz
-                    time.sleep(0.5) 
-                    st.write("Veriler toparlanıyor...")
-                    status_box.update(label="Küresel Tarama Tamamlandı", state="complete", expanded=False)
+                # İNTERNET ARAMASINI BURADA DA GÜÇLENDİRİYORUZ
+                with st.status(f"🌍 Dünya genelinde '{full_name}' verileri toplanıyor...", expanded=True) as status_box:
+                    found_evidence = multi_search_product(full_name)
+                    status_box.update(label="Veri Toplama Tamamlandı", state="complete", expanded=False)
 
-                st.divider()
-                st.caption("Toplanan veriler Konsey tarafından analiz ediliyor...")
-                
-                with st.spinner("Konsey Kararı Hazırlanıyor..."):
+                with st.spinner("Konsey toplanıyor ve ortak karar veriyor..."):
                     council_prompt = f"""
                     Sen Motosiklet Güvenlik Konseyisin. Ürün: '{brand} {model}'
                     
+                    ELİMİZDEKİ İNTERNET VERİLERİ:
+                    {found_evidence}
+                    
                     Aşağıdaki 4 farklı rolü AYNI ANDA canlandır ve birbirinizle TUTARLI cevaplar verin.
                     
-                    GİRDİLER (İNTERNET BULGULARI):
-                    {internet_findings}
-                    
                     KRİTİK DEĞERLENDİRME KURALI (BAŞKAN İÇİN):
-                    1. BULGULARDA KANIT VARSA: İnternet bulgularında 'Certificate', 'Declaration of Conformity', 'EN 13594' geçen bir PDF veya resmi sayfa varsa -> %100 GÜVENİLİR.
-                    2. İÇ BİLGİ (KNOWLEDGE): Bulgularda yoksa bile, sen bu markanın (Örn: {brand}) Avrupa standartlarında üretim yaptığını biliyorsan -> %80-90 GÜVENİLİR.
-                    3. BELİRSİZLİK: Hem bulgu yok hem de marka bilinmiyorsa -> %0 VER.
+                    1. BELGE BULUNDUYSA: İnternet verilerinde 'Certificate' veya 'EN 13594' geçiyorsa -> %100 GÜVENİLİR.
+                    2. BELGE YOK AMA MARKA GÜVENİLİRSE: İnternet aramasında çıkmasa bile, sen bu markayı (Dainese, Revit, Knox vb.) tanıyor ve sertifikalı olduğunu biliyorsan -> %80-90 GÜVENİLİR ver. ("Belge linki anlık bulunamadı ama model biliniyor" de).
+                    3. BELİRSİZLİK: Hem internette yok hem de marka bilinmiyorsa -> %0 VER.
                     
                     Lütfen cevabı TAM OLARAK aşağıdaki formatta ve başlıklarla ver (Başlıkları değiştirme):
                     
@@ -285,10 +262,39 @@ with tab1:
             else:
                 st.warning("AI Hafıza sorgusu için anahtar gerekli.")
             
-            # Bulunan linkleri göster
-            if "internet_findings" in locals() and len(internet_findings) > 50:
-                with st.expander("🌍 Bulunan Küresel Kaynaklar (Detay)"):
-                    st.markdown(internet_findings)
+            st.divider()
+            
+            # --- KLASİK ARAMA ---
+            status_container = st.status("🕵️ İnternet Taranıyor...", expanded=True)
+            
+            # 1. PDF Belge
+            st.markdown("### 1. 📄 Resmi Belge (EN 13594 veya CE)")
+            auto_query = f"{brand} {model} certificate EN 13594 OR CE Declaration of Conformity filetype:pdf"
+            results_auto, _ = search_ddg(auto_query, max_res=3)
+            
+            if results_auto:
+                for res in results_auto:
+                    st.success(f"✅ **Belge Bulundu:** [{res.get('title')}]({res.get('href')})")
+            else:
+                st.warning("⚠️ Otomatik PDF bulunamadı.")
+                st.link_button("👉 Manuel PDF Ara", create_google_link(auto_query))
+
+            # 2. Forumlar
+            st.write("---")
+            st.markdown("### 2. 🗣️ Kullanıcı Yorumları")
+            forum_query = f'{full_name} motosiklet eldiveni yorum şikayet forum'
+            results_forum, _ = search_ddg(forum_query, max_res=4)
+            
+            if results_forum:
+                for res in results_forum:
+                    if any(x in res.get('href', '') for x in ['forum', 'sikayet', 'eksi', 'donanimhaber', 'technopat', 'reddit']):
+                        st.info(f"🗨️ **Tartışma:** [{res.get('title')}]({res.get('href')})")
+                    else:
+                        st.caption(f"Sonuç: [{res.get('title')}]({res.get('href')})")
+            else:
+                st.caption("Forum sonucu yok.")
+
+            status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
 
 # =============================================================================
 # TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> KONTROL ET -> ANALİZ ET)
@@ -315,10 +321,9 @@ with tab2:
                                           accept_multiple_files=True)
 
         # -------------------------------------------
-        # ADIM 1: TANI VE TAHMİN ET (Sıfırdan Başla)
+        # ADIM 1: TANI VE TAHMİN ET
         # -------------------------------------------
         if uploaded_files and st.session_state.lens_step == 1:
-            # Yeni yüklemede hafızayı temizle
             if st.button("🔍 Görseli Tara ve Model Tahmini Yap"):
                 st.session_state.rejected_guesses = [] # Sıfırla
                 image_list = [Image.open(f) for f in uploaded_files]
@@ -368,14 +373,12 @@ with tab2:
                 confirmed_name = st.session_state.lens_ai_guess
                 run_analysis = True
             
-            # 2. TEKRAR DENE (Otomatik Yeni Tahmin - YENİ ÖZELLİK)
+            # 2. TEKRAR DENE (Otomatik Yeni Tahmin)
             if c_retry.button("🔄 Yanlış, Tekrar Tahmin Et"):
-                # Mevcut tahmini 'yasaklılar' listesine ekle
                 st.session_state.rejected_guesses.append(st.session_state.lens_ai_guess)
                 image_list = [Image.open(f) for f in uploaded_files]
                 
                 with st.spinner("AI farklı bir olasılık düşünüyor..."):
-                    # Yasaklı listesini prompt'a ekle
                     rejected_str = ", ".join(st.session_state.rejected_guesses)
                     retry_prompt = f"""
                     Bu fotoğraftaki eldivenin markasını ve modelini tekrar tahmin et.
@@ -409,14 +412,15 @@ with tab2:
                 st.divider()
                 st.subheader(f"🔍 '{confirmed_name}' Analiz Ediliyor...")
                 
-                # 1. DERİN İNTERNET ARAŞTIRMASI (Global)
-                found_evidence = "İnternette ek belge bulunamadı."
-                with st.status(f"🌐 Küresel veritabanları taranıyor...", expanded=True) as status_search:
+                # 1. DERİN İNTERNET ARAŞTIRMASI (Multi-Search)
+                with st.status(f"🌐 İnternette çapraz tarama yapılıyor...", expanded=True) as status_search:
                     if "Bilinmeyen" not in confirmed_name:
-                        # Burada yeni deep_research fonksiyonunu kullanıyoruz
-                        found_evidence = deep_research_product(confirmed_name)
+                        # Artık tek sorgu değil, çoklu sorgu yapıyoruz
+                        found_evidence = multi_search_product(confirmed_name)
+                    else:
+                        found_evidence = "Model ismi bilinmediği için internet verisi yok."
                     
-                    status_search.update(label="Küresel Tarama Bitti", state="complete", expanded=False)
+                    status_search.update(label="İnternet Taraması Bitti", state="complete", expanded=False)
 
                 # 2. KONSEY ANALİZİ
                 with st.spinner(f"Konsey Başkanı verileri birleştiriyor..."):
@@ -435,14 +439,11 @@ with tab2:
                     
                     GÖREV: Yüklenen fotoğrafları ve internet bulgularını KARŞILAŞTIRARAK (Cross-Check) analiz yap.
                     
-                    KRİTİK ÇELİŞKİ KURALI (BAŞKAN İÇİN):
-                    - İnternet sonuçlarında bu modelin sertifikası VAR (Uygun) görünüyor ANCAK yüklenen fotoğraflarda etiket YOKSA veya ürün kalitesiz/replika duruyorsa:
-                      -> Karar: "RİSKLİ (REPLİKA ŞÜPHESİ)" ver. Puanı DÜŞÜR.
-                      -> Açıklama: "Modelin orijinali sertifikalı ancak fotoğraftaki üründe etiket/kalite eksik." de.
-                    
-                    - İnternette belge yok VE fotoğrafta da etiket yoksa -> %0 PUAN.
-                    
-                    - İnternette belge var VE fotoğrafta da etiket/kalite uyuşuyorsa -> YÜKSEK PUAN.
+                    KRİTİK DEĞERLENDİRME KURALI (BAŞKAN İÇİN):
+                    1. FİZİKSEL KANIT: Fotoğraflarda 'EN 13594' veya 'CE' etiketi açıkça okunuyorsa -> %100 GÜVENİLİR.
+                    2. İNTERNET KANITI: Etiket yok ama internet sonuçlarında belge bulunduysa -> %90 GÜVENİLİR (Replika riskini not düş).
+                    3. İÇ BİLGİ (KNOWLEDGE): İnternet sonuçlarında belge çıkmasa BİLE, sen bu modelin (Örn: {confirmed_name}) sertifikalı olduğunu KENDİ BİLGİNDEN emin olarak biliyorsan -> %80-90 GÜVENİLİR ver (Ancak "İnternet belgesi anlık bulunamadı ama model biliniyor" de).
+                    4. HİÇBİRİ YOKSA: Ne etiket, ne internet kaydı, ne de bilinen bir marka -> %0 PUAN.
                     
                     Lütfen cevabı TAM OLARAK aşağıdaki formatta ver:
                     
