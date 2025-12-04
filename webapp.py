@@ -11,10 +11,8 @@ import random
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="Eldiven Dedektifi (Thinking AI)", page_icon="🏍️", layout="wide")
 
-# API Anahtarı Yönetimi (Önce Secrets kontrol edilir)
-api_key_from_secrets = None
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key_from_secrets = st.secrets["GOOGLE_API_KEY"]
+# Varsayılan Gemini Anahtarı (Kod içinde gömülü)
+default_gemini_key = "AIzaSyD-HpfQU8NwKM9PmzucKbNtVXoYwccIBUQ"
 
 # -----------------------------------------------------------------------------
 # YARDIMCI FONKSİYONLAR
@@ -56,7 +54,7 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
                 'gemini-1.5-pro',
                 'gemini-1.5-pro-001'
             ]
-            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın."
+            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
         else:
             # Hızlı modeller listesi
             models_to_try = [
@@ -130,7 +128,9 @@ with st.sidebar:
             active_api_key = user_key
             st.success("Anahtar tanımlandı!")
         else:
-            st.markdown("[👉 Ücretsiz API Anahtarı Almak İçin Tıkla](https://aistudio.google.com/app/apikey)")
+            # Eğer kullanıcı girmezse varsayılan gömülü anahtarı kullan (Test için)
+            active_api_key = default_gemini_key
+            st.info("Otomatik test anahtarı kullanılıyor.")
 
     st.divider()
     st.markdown("### 🔗 Hızlı Linkler")
@@ -170,22 +170,25 @@ with tab1:
                 with c1:
                     st.info("📜 **Mevzuat Uzmanı**")
                     with st.spinner("Yasal kayıtlar taranıyor..."):
-                        resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", 
-                            f"'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı?", mode=selected_mode)
+                        # Üç tırnak kullanarak string hatasını önledik
+                        prompt_1 = f"""'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı?"""
+                        resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", prompt_1, mode=selected_mode)
                         st.write(resp)
 
                 with c2:
                     st.warning("🛠️ **Malzeme Mühendisi**")
                     with st.spinner("Yapısal analiz yapılıyor..."):
-                        resp = ask_gemini(active_api_key, "Tekstil Mühendisi", 
-                            f"'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu?", mode=selected_mode)
+                        # Üç tırnak kullanımı
+                        prompt_2 = f"""'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu?"""
+                        resp = ask_gemini(active_api_key, "Tekstil Mühendisi", prompt_2, mode=selected_mode)
                         st.write(resp)
 
                 with c3:
                     st.error("🕵️ **Şüpheci Dedektif**")
                     with st.spinner("Risk analizi yapılıyor..."):
-                        resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", 
-                            f"'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol.", mode=selected_mode)
+                        # Üç tırnak kullanımı
+                        prompt_3 = f"""'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol."""
+                        resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", prompt_3, mode=selected_mode)
                         st.write(resp)
             else:
                 st.warning("AI Hafıza sorgusu için lütfen sol menüden API Anahtarı giriniz.")
@@ -240,12 +243,25 @@ with tab2:
             with col1:
                 st.markdown("### 📜 Mevzuatçı")
                 with st.spinner("Etiket kodları okunuyor..."):
-                    resp = ask_gemini(active_api_key, "Gümrük ve Sertifikasyon Denetçisi", 
-                        "Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?", img, mode=selected_mode)
+                    # Üç tırnak kullanımı
+                    prompt_img_1 = """Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı?"""
+                    resp = ask_gemini(active_api_key, "Gümrük Denetçisi", prompt_img_1, img, mode=selected_mode)
                     st.info(resp)
             
             with col2:
                 st.markdown("### 🛠️ Mühendis")
                 with st.spinner("Dikiş ve malzeme inceleniyor..."):
-                    resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", 
-                        "
+                    # Üç tırnak kullanımı
+                    prompt_img_2 = """Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı?"""
+                    resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", prompt_img_2, img, mode=selected_mode)
+                st.warning(resp)
+            
+            with col3:
+                st.markdown("### 🕵️ Dedektif")
+                with st.spinner("Piyasa araştırması..."):
+                    # Üç tırnak kullanımı
+                    prompt_img_3 = """Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz?"""
+                    resp = ask_gemini(active_api_key, "Sahte Ürün Uzmanı", prompt_img_3, img, mode=selected_mode)
+                st.error(resp)
+            
+            st.success("✅ **Konsey Kararı:** Üç görüşü okuyarak nihai kararınızı verin.")
