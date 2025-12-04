@@ -29,10 +29,6 @@ def create_google_link(query):
     encoded_query = urllib.parse.quote(query)
     return f"https://www.google.com/search?q={encoded_query}"
 
-def create_google_images_link(query):
-    encoded_query = urllib.parse.quote(query)
-    return f"https://www.google.com/search?tbm=isch&q={encoded_query}"
-
 @st.cache_data(show_spinner=False)
 def search_ddg(query, max_res=3):
     backends = ['api', 'html', 'lite'] 
@@ -267,13 +263,13 @@ with tab1:
             status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
 
 # =============================================================================
-# TAB 2: FOTOĞRAF ANALİZİ (GÖRSEL TANIMA & ÇOKLU FOTOĞRAF)
+# TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> ARA -> ANALİZ ET)
 # =============================================================================
 with tab2:
     if not active_api_key:
         st.warning("⚠️ Konsey Modu için API Anahtarı şarttır.")
     else:
-        st.success("✅ **Lens Modu Hazır:** Görsel tarama ile ürünü bulalım.")
+        st.success("✅ **Lens Modu Hazır:** Etiket olmasa bile ürünü tanıyıp araştırabilirim.")
         
         st.info("""
         📸 **ÖNERİLEN FOTOĞRAFLAR (En az 3 adet yüklemeniz önerilir):**
@@ -282,82 +278,61 @@ with tab2:
         3. **İç Etiket:** Varsa sertifika kodunu okumak için.
         """)
         
+        # State Yönetimi
+        if "lens_step" not in st.session_state: st.session_state.lens_step = 1
+        if "lens_ai_guess" not in st.session_state: st.session_state.lens_ai_guess = ""
+        
         uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim)", 
                                           type=["jpg", "png", "jpeg", "webp"], 
                                           accept_multiple_files=True)
 
-        if "step" not in st.session_state: st.session_state.step = 1
-        if "ai_guess" not in st.session_state: st.session_state.ai_guess = ""
-
         # -------------------------------------------
-        # ADIM 1: TANI VE EŞLEŞTİR
+        # ADIM 1: TANI VE TAHMİN ET
         # -------------------------------------------
-        if uploaded_files and st.session_state.step == 1:
-            st.image([Image.open(f) for f in uploaded_files], width=150, caption="Yüklenen Görseller")
-            
-            if st.button("🔍 Görsel Eşleştirme ve Tanımlama Yap"):
+        if uploaded_files and st.session_state.lens_step == 1:
+            if st.button("🔍 Görseli Tara ve Tahmin Et"):
                 image_list = [Image.open(f) for f in uploaded_files]
                 
-                with st.spinner("Görsel taranıyor, marka/model tespiti yapılıyor..."):
+                with st.spinner("AI görsellerden model tahmini yapıyor..."):
                     identify_prompt = """
-                    Sen bir GÖRSEL ARAMA MOTORUSUN.
-                    Bu fotoğraflardaki motosiklet eldivenini veritabanındaki görsellerle piksel piksel eşleştir.
+                    Bu fotoğraflardaki motosiklet eldiveninin MARKA ve MODELİNİ tespit et.
+                    Logoları oku, tasarım çizgilerini incele.
                     
-                    GÖREVLER:
-                    1. Logoları oku (OCR).
-                    2. Tasarım desenini analiz et.
-                    3. Bu ürünün TAM MARKA ve MODELİNİ bul.
-                    
-                    Cevabı SADECE marka ve model ismi olarak ver.
-                    Örn: 'Revit Sand 4' veya 'Scoyco MC29'
-                    Eğer marka yoksa 'Markasız Çin Malı' yaz.
+                    Cevabı SADECE marka ve model ismi olarak ver. (Örn: Revit Sand 4)
+                    Eğer emin değilsen 'Bilinmeyen Marka' yaz.
                     """
-                    prediction = ask_gemini(active_api_key, "Görsel Arama Motoru", identify_prompt, image_list, mode="flash").strip()
+                    prediction = ask_gemini(active_api_key, "Ürün Tanıma Uzmanı", identify_prompt, image_list, mode="flash").strip()
                     
-                    st.session_state.ai_guess = prediction.replace("Marka ve Model:", "").strip()
-                    st.session_state.step = 2
+                    st.session_state.lens_ai_guess = prediction.replace("Marka ve Model:", "").strip()
+                    st.session_state.lens_step = 2
                     st.rerun()
 
         # -------------------------------------------
-        # ADIM 2: DOĞRULA VE ANALİZ ET
+        # ADIM 2: KULLANICI DOĞRULAMASI
         # -------------------------------------------
-        if st.session_state.step == 2:
+        if st.session_state.lens_step == 2:
+            st.image([Image.open(f) for f in uploaded_files], width=120, caption="Yüklenenler")
+            
             st.divider()
+            st.subheader("📝 Model Doğrulama")
             
-            # GÖRSEL DOĞRULAMA KISMI
-            col_ver1, col_ver2 = st.columns([2, 1])
-            
-            with col_ver1:
-                st.subheader("🕵️ Görsel Tanıma Sonucu")
-                st.info(f"Yapay zeka bu ürünün **{st.session_state.ai_guess}** olduğunu düşünüyor.")
-                
-                # Google Görseller Linki Oluşturma
-                google_img_link = create_google_images_link(st.session_state.ai_guess)
-                st.markdown(f"""
-                <div style="background-color:#e8f5e9;padding:10px;border-radius:10px;border:1px solid #4caf50;">
-                    <h4>👁️ Gözle Kontrol Edin:</h4>
-                    <p>Yapay zekanın bulduğu model ile elinizdeki ürün aynı mı? Aşağıdaki butona basarak Google Görseller'deki fotoğraflarla karşılaştırın.</p>
-                    <a href="{google_img_link}" target="_blank" style="text-decoration:none;">
-                        <button style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;">
-                            🖼️ Google Görseller'de '{st.session_state.ai_guess}' Ara
-                        </button>
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
+            col_check1, col_check2 = st.columns([2, 1])
+            with col_check1:
+                st.info(f"Yapay zeka bu ürünün **{st.session_state.lens_ai_guess}** olduğunu düşünüyor.")
+                google_img_link = create_google_images_link(st.session_state.lens_ai_guess)
+                st.markdown(f"[🖼️ Google Görseller'de '{st.session_state.lens_ai_guess}' Ara]({google_img_link})")
 
-            with col_ver2:
-                st.markdown("**Doğru değilse düzeltin:**")
-                confirmed_name = st.text_input("Gerçek Model İsmi:", value=st.session_state.ai_guess)
+            with col_check2:
+                confirmed_name = st.text_input("Model İsmi Doğru mu? (Yanlışsa Düzeltin):", value=st.session_state.lens_ai_guess)
             
-            st.write("") # Boşluk
+            st.write("")
             
-            # İşlem Butonları
             c_back, c_go = st.columns([1, 4])
-            if c_back.button("🔙 Geri Dön"):
-                st.session_state.step = 1
+            if c_back.button("🔙 Geri"):
+                st.session_state.lens_step = 1
                 st.rerun()
                 
-            if c_go.button("🚀 Doğrula ve Sertifika Ara"):
+            if c_go.button("🚀 Bu İsimle Analiz Et"):
                 # --- İNTERNET ARAŞTIRMASI ---
                 found_evidence = "İnternette ek belge bulunamadı."
                 with st.status(f"🌐 İnternette '{confirmed_name}' sertifikaları aranıyor...", expanded=False) as status_search:
@@ -370,14 +345,17 @@ with tab2:
                             for res in search_results:
                                 evidence_links.append(f"- {res.get('title')}: {res.get('href')}")
                             found_evidence = "\n".join(evidence_links)
+                        else:
+                            st.warning("İnternette doğrudan belge bulunamadı.")
                     status_search.update(label="İnternet Taraması Bitti", state="complete")
 
                 # --- KONSEY ANALİZİ ---
                 st.divider()
-                with st.spinner(f"Konsey Başkanı '{confirmed_name}' için görselleri ve belgeleri birleştiriyor..."):
+                with st.spinner(f"Konsey Başkanı '{confirmed_name}' için analiz yapıyor..."):
                     
                     image_list = [Image.open(f) for f in uploaded_files]
                     
+                    # ÇAPRAZ KONTROL PROMPT'U
                     council_prompt_img = f"""
                     Sen Motosiklet Güvenlik Konseyisin. 
                     
@@ -385,15 +363,19 @@ with tab2:
                     
                     BULGULAR:
                     1. Görsel Kanıtlar: Yüklenen fotoğraflar.
-                    2. İnternet Arama Sonuçları:
+                    2. İnternet Arama Sonuçları (Resmi Sertifikalar):
                     {found_evidence}
                     
-                    GÖREV: Yüklenen fotoğrafları ve internet bulgularını BİRLEŞTİREREK analiz yap.
+                    GÖREV: Yüklenen fotoğrafları ve internet bulgularını KARŞILAŞTIRARAK (Cross-Check) analiz yap.
                     
-                    KRİTİK KURAL (BAŞKAN İÇİN):
-                    - Etikette 'EN 13594' veya 'CE' yazıyorsa -> GÜVENİLİR.
-                    - Etiket yok AMA internet sonuçlarında bu modelin sertifikalı olduğu kanıtlandıysa -> GÜVENİLİR (Ancak replika riskini not düş).
-                    - Etiket yok VE internette sertifika kaydı yoksa -> %0 PUAN.
+                    KRİTİK ÇELİŞKİ KURALI (BAŞKAN İÇİN):
+                    - İnternet sonuçlarında bu modelin sertifikası VAR (Uygun) görünüyor ANCAK yüklenen fotoğraflarda etiket YOKSA veya ürün kalitesiz/replika duruyorsa:
+                      -> Karar: "RİSKLİ (REPLİKA ŞÜPHESİ)" ver. Puanı DÜŞÜR.
+                      -> Açıklama: "Modelin orijinali sertifikalı ancak fotoğraftaki üründe etiket/kalite eksik." de.
+                    
+                    - İnternette belge yok VE fotoğrafta da etiket yoksa -> %0 PUAN.
+                    
+                    - İnternette belge var VE fotoğrafta da etiket/kalite uyuşuyorsa -> YÜKSEK PUAN.
                     
                     Lütfen cevabı TAM OLARAK aşağıdaki formatta ver:
                     
@@ -422,7 +404,7 @@ with tab2:
                             elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                             elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                         
-                        if "%0" in p_baskan or " 0" in p_baskan or "Düşük" in p_baskan:
+                        if "%0" in p_baskan or " 0" in p_baskan or "Düşük" in p_baskan or "RİSKLİ" in p_baskan:
                             st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
                         else:
                             st.success(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
