@@ -37,69 +37,80 @@ def search_ddg(query, max_res=3):
 def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
     """
     mode: 'flash' (Hızlı) veya 'thinking' (Akıl Yürütme)
-    Hata durumunda (404 Not Found) otomatik olarak eski/kararlı modellere düşer.
+    Hata durumunda 404 almamak için API'den mevcut modelleri sorgular ve
+    çalışan en uygun modeli dinamik olarak seçer.
     """
     try:
         genai.configure(api_key=api_key)
         
-        # Model Seçim Mantığı ve Yedek Listeleri
+        # 1. ADIM: Mevcut Modelleri Listele
+        # Ezbere isim denemek yerine, hesabın erişebildiği modelleri çekiyoruz.
+        available_models = []
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+        except Exception as e:
+            return f"Model listesi alınamadı: {str(e)}"
+
+        # 2. ADIM: İstenen Moda Göre En İyi Modeli Seç
+        target_model = None
+        
+        # Önceliklendirme fonksiyonu
+        def find_best_match(keywords):
+            for m in available_models:
+                for k in keywords:
+                    if k in m.lower():
+                        return m
+            return None
+
         if mode == "thinking":
-            # Düşünen Modeller: En zekiden en kararlıya
-            models_to_try = [
-                'gemini-2.0-flash-thinking-exp-01-21', 
-                'gemini-2.0-flash-thinking-exp',       
-                'gemini-1.5-pro-latest',
-                'gemini-1.5-pro',
-                'gemini-1.5-pro-001'
-            ]
-            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen ve detaylı analiz yapan bir uzmansın."
+            # Düşünme modu için öncelik: Thinking > Pro
+            target_model = find_best_match(['thinking', 'pro', '1.5'])
+            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
         else:
-            # Hızlı Modeller: Hızlıdan en uyumluya (Gemini Pro eklendi)
-            models_to_try = [
-                'gemini-1.5-flash', 
-                'gemini-1.5-flash-latest',
-                'gemini-1.5-flash-001',
-                'gemini-1.5-pro', # Flash yoksa Pro kullan
-                'gemini-pro'      # O da yoksa en eski kararlı sürümü kullan
-            ]
+            # Hızlı mod için öncelik: Flash > 1.5 > Pro
+            target_model = find_best_match(['flash', '1.5', 'pro'])
             system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
 
-        full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nLütfen Türkçe cevap ver."
-        
-        last_err = ""
-        
-        for m_name in models_to_try:
-            try:
-                # Eski modellerde (gemini-pro) görsel desteği 'gemini-pro-vision' adıyla ayrıdır.
-                current_model_name = m_name
-                if image and m_name == 'gemini-pro':
-                    current_model_name = 'gemini-pro-vision'
-
-                model = genai.GenerativeModel(current_model_name)
-                
-                # Güvenlik ayarlarını gevşet (Teknik analiz engellenmesin)
-                safety_settings = [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                ]
-
-                if image:
-                    response = model.generate_content([full_prompt, image], safety_settings=safety_settings)
-                else:
-                    response = model.generate_content(full_prompt, safety_settings=safety_settings)
-                
-                return response.text
-            except Exception as e:
-                last_err = str(e)
-                continue # Bu model çalışmadıysa sıradakine geç
-                
-        # Hiçbiri çalışmazsa ve mod 'thinking' ise Flash moduna düş (Son Çare)
-        if mode == "thinking":
-            return f"⚠️ Düşünen modeller yoğun, Hızlı Mod devreye girdi...\n\n" + ask_gemini(api_key, persona, prompt, image, mode="flash")
+        # Eğer hala model bulamadıysa, listedeki herhangi birini al (Son çare)
+        if not target_model and available_models:
+            target_model = available_models[0]
             
-        return f"Yapay Zeka Bağlantı Hatası: Hiçbir model yanıt vermedi. (Son hata: {last_err})"
+        if not target_model:
+            return "⚠️ Hata: Hesabınızda kullanılabilir hiç model bulunamadı (API Key veya Bölge sorunu)."
+
+        # 3. ADIM: Seçilen Model ile Üret
+        try:
+            model = genai.GenerativeModel(target_model)
+            
+            full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nLütfen Türkçe cevap ver."
+            
+            # Güvenlik ayarlarını gevşet
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ]
+
+            if image:
+                # Eski 'gemini-pro' (vision olmayan) modele resim atılırsa hata verir.
+                # Eğer seçilen model 'vision' desteklemiyorsa ve resim varsa, sadece 'vision' olanı ara.
+                if 'vision' not in target_model and '1.5' not in target_model and '2.0' not in target_model:
+                     # 1.5 ve 2.0 modelleri hem metin hem resim destekler, eskiler ayrık olabilir.
+                     vision_model = find_best_match(['vision'])
+                     if vision_model:
+                         model = genai.GenerativeModel(vision_model)
+
+                response = model.generate_content([full_prompt, image], safety_settings=safety_settings)
+            else:
+                response = model.generate_content(full_prompt, safety_settings=safety_settings)
+            
+            return response.text
+            
+        except Exception as e:
+            return f"Model Hatası ({target_model}): {str(e)}"
 
     except Exception as e:
         return f"Kritik Hata: {str(e)}"
@@ -120,7 +131,7 @@ with st.sidebar:
     # Seçimi koda uygun formata çevir
     selected_mode = "flash" if "Flash" in ai_mode else "thinking"
     
-    st.info(f"Aktif Model: **Google Gemini {selected_mode.capitalize()}**")
+    st.info(f"Aktif Model: **Otomatik Seçim (Mod: {selected_mode})**")
     
     # Anahtar Yönetimi
     user_key = st.text_input("Özel API Key (İsteğe Bağlı)", type="password")
