@@ -215,7 +215,6 @@ with tab1:
                             elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                             elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                         
-                        score_color = "red"
                         if "%0" in p_baskan or " 0" in p_baskan:
                             st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
                         else:
@@ -267,7 +266,7 @@ with tab1:
             status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
 
 # =============================================================================
-# TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> ARA -> ANALİZ ET)
+# TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> KONTROL ET -> ANALİZ ET)
 # =============================================================================
 with tab2:
     if not active_api_key:
@@ -276,25 +275,27 @@ with tab2:
         st.success("✅ **Lens Modu Hazır:** Etiket olmasa bile ürünü tanıyıp araştırabilirim.")
         
         st.info("""
-        📸 **ÖNERİLEN FOTOĞRAFLAR (En az 3 adet yüklemeniz önerilir):**
-        1. **Eldivenin Dış Yüzü:** Modeli ve markayı tanımak için.
-        2. **Avuç İçi:** Sürtünme bölgelerini ve dikişleri görmek için.
-        3. **İç Etiket:** Varsa sertifika kodunu okumak için.
+        📸 **ÖNERİLEN FOTOĞRAFLAR:**
+        * En iyi sonuç için eldivenin markasını/modelini gösteren farklı açılardan (dış yüz, iç etiket) fotoğraflar yükleyin.
         """)
         
         # State Yönetimi
         if "lens_step" not in st.session_state: st.session_state.lens_step = 1
         if "lens_ai_guess" not in st.session_state: st.session_state.lens_ai_guess = ""
+        if "lens_manual_mode" not in st.session_state: st.session_state.lens_manual_mode = False
+        if "rejected_guesses" not in st.session_state: st.session_state.rejected_guesses = [] # YENİ: Reddedilen tahminler listesi
         
         uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim)", 
                                           type=["jpg", "png", "jpeg", "webp"], 
                                           accept_multiple_files=True)
 
         # -------------------------------------------
-        # ADIM 1: TANI VE TAHMİN ET
+        # ADIM 1: TANI VE TAHMİN ET (Sıfırdan Başla)
         # -------------------------------------------
         if uploaded_files and st.session_state.lens_step == 1:
-            if st.button("🔍 Görseli Tara ve Tahmin Et"):
+            # Yeni yüklemede hafızayı temizle
+            if st.button("🔍 Görseli Tara ve Model Tahmini Yap"):
+                st.session_state.rejected_guesses = [] # Sıfırla
                 image_list = [Image.open(f) for f in uploaded_files]
                 
                 with st.spinner("AI görsellerden model tahmini yapıyor..."):
@@ -309,37 +310,83 @@ with tab2:
                     
                     st.session_state.lens_ai_guess = prediction.replace("Marka ve Model:", "").strip()
                     st.session_state.lens_step = 2
+                    st.session_state.lens_manual_mode = False
                     st.rerun()
 
         # -------------------------------------------
-        # ADIM 2: KULLANICI DOĞRULAMASI
+        # ADIM 2: KULLANICI DOĞRULAMASI & TEKRAR DENE
         # -------------------------------------------
         if st.session_state.lens_step == 2:
             st.image([Image.open(f) for f in uploaded_files], width=120, caption="Yüklenenler")
-            
             st.divider()
-            st.subheader("📝 Model Doğrulama")
             
-            col_check1, col_check2 = st.columns([2, 1])
-            with col_check1:
-                st.info(f"Yapay zeka bu ürünün **{st.session_state.lens_ai_guess}** olduğunu düşünüyor.")
-                google_img_link = create_google_images_link(st.session_state.lens_ai_guess)
-                st.markdown(f"[🖼️ Google Görseller'de '{st.session_state.lens_ai_guess}' Ara]({google_img_link})")
+            st.subheader("📝 Yapay Zeka Tahmini")
+            
+            # Tahmin Gösterimi
+            st.info(f"Tespit Edilen Model: **{st.session_state.lens_ai_guess}**")
+            
+            # Görsel doğrulama linki
+            google_img_link = create_google_images_link(st.session_state.lens_ai_guess)
+            st.markdown(f"[🖼️ Google Görseller'de Kontrol Et]({google_img_link})")
+            
+            st.write("---")
+            st.write("### Bu model ismi doğru mu?")
 
-            with col_check2:
-                confirmed_name = st.text_input("Model İsmi Doğru mu? (Yanlışsa Düzeltin):", value=st.session_state.lens_ai_guess)
+            confirmed_name = None
+            run_analysis = False
+
+            # BUTON GRUBU
+            c_yes, c_retry, c_edit = st.columns(3)
             
-            st.write("")
+            # 1. DOĞRU (Analize Geç)
+            if c_yes.button("✅ Evet, Doğru"):
+                confirmed_name = st.session_state.lens_ai_guess
+                run_analysis = True
             
-            c_back, c_go = st.columns([1, 4])
-            if c_back.button("🔙 Geri"):
-                st.session_state.lens_step = 1
-                st.rerun()
+            # 2. TEKRAR DENE (Otomatik Yeni Tahmin - YENİ ÖZELLİK)
+            if c_retry.button("🔄 Yanlış, Tekrar Tahmin Et"):
+                # Mevcut tahmini 'yasaklılar' listesine ekle
+                st.session_state.rejected_guesses.append(st.session_state.lens_ai_guess)
+                image_list = [Image.open(f) for f in uploaded_files]
                 
-            if c_go.button("🚀 Bu İsimle Analiz Et"):
-                # --- İNTERNET ARAŞTIRMASI ---
+                with st.spinner("AI farklı bir olasılık düşünüyor..."):
+                    # Yasaklı listesini prompt'a ekle
+                    rejected_str = ", ".join(st.session_state.rejected_guesses)
+                    retry_prompt = f"""
+                    Bu fotoğraftaki eldivenin markasını ve modelini tekrar tahmin et.
+                    
+                    DİKKAT: Daha önce şu tahminleri yaptın ve YANLIŞTI: {rejected_str}
+                    Lütfen bunları tekrar söyleme. Başka hangi model olabilir? Daha dikkatli bak.
+                    
+                    Cevabı SADECE marka ve model ismi olarak ver.
+                    """
+                    new_prediction = ask_gemini(active_api_key, "Ürün Tanıma Uzmanı", retry_prompt, image_list, mode="flash").strip()
+                    
+                    st.session_state.lens_ai_guess = new_prediction.replace("Marka ve Model:", "").strip()
+                    st.rerun()
+
+            # 3. DÜZENLE (Manuel Giriş)
+            if c_edit.button("✏️ Elle Düzenle"):
+                st.session_state.lens_manual_mode = True
+                st.rerun()
+
+            # Manuel mod açıksa giriş kutusunu göster
+            if st.session_state.lens_manual_mode:
+                st.warning("Doğru ismi aşağıya yazın:")
+                manual_name = st.text_input("Marka/Model:", value=st.session_state.lens_ai_guess)
+                if st.button("🚀 Bu İsimle Analiz Et"):
+                    confirmed_name = manual_name
+                    run_analysis = True
+
+            # --- ANALİZ İŞLEMİ (Ortak) ---
+            if run_analysis and confirmed_name:
+                
+                st.divider()
+                st.subheader(f"🔍 '{confirmed_name}' Analiz Ediliyor...")
+                
+                # 1. İNTERNET ARAŞTIRMASI
                 found_evidence = "İnternette ek belge bulunamadı."
-                with st.status(f"🌐 İnternette '{confirmed_name}' sertifikaları aranıyor...", expanded=False) as status_search:
+                with st.status(f"🌐 İnternet taranıyor...", expanded=False) as status_search:
                     if "Bilinmeyen" not in confirmed_name:
                         cert_query = f"{confirmed_name} EN 13594 certificate pdf"
                         search_results, _ = search_ddg(cert_query, max_res=3)
@@ -353,9 +400,8 @@ with tab2:
                             st.warning("İnternette doğrudan belge bulunamadı.")
                     status_search.update(label="İnternet Taraması Bitti", state="complete")
 
-                # --- KONSEY ANALİZİ ---
-                st.divider()
-                with st.spinner(f"Konsey Başkanı '{confirmed_name}' için analiz yapıyor..."):
+                # 2. KONSEY ANALİZİ
+                with st.spinner(f"Konsey Başkanı verileri birleştiriyor..."):
                     
                     image_list = [Image.open(f) for f in uploaded_files]
                     
@@ -420,3 +466,11 @@ with tab2:
                     except:
                         st.warning("Format hatası, ham metin:")
                         st.write(full_resp_img)
+            
+            # Resetleme butonu (En altta)
+            st.divider()
+            if st.button("🔄 Yeni Bir Ürün Tara"):
+                st.session_state.lens_step = 1
+                st.session_state.lens_manual_mode = False
+                st.session_state.rejected_guesses = []
+                st.rerun()
