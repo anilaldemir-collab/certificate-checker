@@ -54,7 +54,6 @@ def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
         genai.configure(api_key=api_key)
         
         # Model Seçim Mantığı
-        # Görsel varsa 'vision' destekli modelleri önceliklendir
         available_models = []
         try:
             for m in genai.list_models():
@@ -71,7 +70,7 @@ def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
 
         if mode == "thinking":
             target_model = find_best_match(['thinking', 'pro', '1.5'])
-            system_instruction = f"Sen '{persona}' rolünde, derinlemesine analiz yapan bir uzmansın. Cevapların KISA, NET ve MADDELER halinde olsun."
+            system_instruction = f"Sen '{persona}' rolünde, çoklu bakış açısıyla analiz yapan tek bir otoritesin. Cevapların kendi içinde tutarlı olmalı."
         else:
             target_model = find_best_match(['flash', '1.5', 'pro'])
             system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
@@ -80,25 +79,22 @@ def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
             target_model = available_models[0]
 
         # İçerik Hazırlama (Metin + Görseller)
-        full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nDEĞERLENDİRME KRİTERİ: EN 13594 sertifikası VEYA CE Belgesi (Conformité Européenne) işaretlerinden HERHANGİ BİRİ varsa ürünü 'UYGUN' olarak değerlendir.\n\nLütfen Türkçe cevap ver."
+        full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nDEĞERLENDİRME KRİTERİ: EN 13594 veya CE Belgesi varsa 'UYGUN'.\n\nLütfen Türkçe cevap ver."
         
         content_parts = [full_prompt]
         
         if images:
-            # images bir liste mi yoksa tek resim mi kontrol et
             if isinstance(images, list):
-                content_parts.extend(images) # Listeyi ekle
+                content_parts.extend(images)
             else:
-                content_parts.append(images) # Tek resmi ekle
+                content_parts.append(images)
 
-            # Eğer resim varsa ve seçilen model vision desteklemiyorsa değiştir
             if '1.5' not in target_model and '2.0' not in target_model and 'vision' not in target_model:
                  vision_model = find_best_match(['vision', '1.5', 'flash'])
                  if vision_model: target_model = vision_model
 
         try:
             model = genai.GenerativeModel(target_model)
-            # Güvenlik ayarları
             safety = [{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                       {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}]
             
@@ -167,47 +163,62 @@ with tab1:
         else:
             full_name = f"{brand} {model}"
             
-            # --- AI KONSEYİ: HAFIZA SORGUSU ---
+            # --- AI KONSEYİ: TEK OTURUM (Tutarlılık İçin) ---
             if active_api_key:
-                with st.spinner("Konsey Başkanı veritabanını tarıyor..."):
-                    score_prompt = f"""
-                    Sen Motosiklet Güvenlik Konseyi Başkanısın.
-                    Ürün: {brand} {model}
+                st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi")
+                st.caption("Veriler tek bir oturumda, tutarlı bir şekilde analiz ediliyor...")
+                
+                with st.spinner("Konsey toplanıyor ve ortak karar veriyor..."):
+                    council_prompt = f"""
+                    Sen Motosiklet Güvenlik Konseyisin. Ürün: '{brand} {model}'
                     
-                    Bu ürünün EN 13594 sertifikası VEYA CE belgesi var mı?
-                    İkisinden birinin olması yeterlidir.
+                    Aşağıdaki 4 farklı rolü AYNI ANDA canlandır ve birbirinizle TUTARLI cevaplar verin.
+                    Örneğin Mevzuatçı 'belge yok' derse, Başkan 'güvenli' diyemez.
                     
-                    Cevabı SADECE şu formatta ver:
-                    **Güvenilirlik Skoru:** %XX
-                    **Kısa Karar:** (Tek cümle, 'EN 13594 veya CE bulundu/bulunamadı' şeklinde)
+                    1. KONSEY BAŞKANI: Genel güven skoru (%0-100) ve tek cümlelik nihai karar.
+                    2. MEVZUAT UZMANI: EN 13594 sertifikası VEYA CE belgesi var mı? (Bilgi yoksa 'Veri yok' de).
+                    3. MALZEME MÜHENDİSİ: Malzeme koruması yeterli mi?
+                    4. ŞÜPHECİ DEDEKTİF: Sahtecilik riski veya kronik sorun var mı?
+                    
+                    Lütfen cevabı TAM OLARAK aşağıdaki formatta ve başlıklarla ver (Başlıkları değiştirme):
+                    
+                    [BAŞKAN]
+                    **Sertifika Güvenilirlik Skoru:** %XX
+                    **Kısa Karar:** ...
+                    
+                    [MEVZUAT]
+                    ...
+                    
+                    [MÜHENDİS]
+                    ...
+                    
+                    [DEDEKTİF]
+                    ...
                     """
-                    score_resp = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt, mode=selected_mode)
-                
-                st.info(f"📊 **Başkanın Kararı:**\n\n{score_resp}")
-
-                st.subheader(f"🧠 {ai_mode.split(' ')[2]} Hafıza Konseyi Detayları")
-                c1, c2, c3 = st.columns(3)
-                
-                with c1:
-                    st.info("📜 **Mevzuat Uzmanı**")
-                    with st.spinner("Yasal kayıtlar..."):
-                        prompt_1 = f"""'{brand} {model}' için EN 13594 VEYA CE belgesi kaydı var mı? Biri varsa 'Uygun' de. Kısa cevap."""
-                        resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", prompt_1, mode=selected_mode)
-                        st.write(resp)
-
-                with c2:
-                    st.warning("🛠️ **Malzeme Mühendisi**")
-                    with st.spinner("Yapısal analiz..."):
-                        prompt_2 = f"""'{brand} {model}' malzeme kalitesi koruma için yeterli mi? Kısa özetle."""
-                        resp = ask_gemini(active_api_key, "Tekstil Mühendisi", prompt_2, mode=selected_mode)
-                        st.write(resp)
-
-                with c3:
-                    st.error("🕵️ **Şüpheci Dedektif**")
-                    with st.spinner("Risk analizi..."):
-                        prompt_3 = f"""'{brand} {model}' hakkında sahtecilik şikayeti var mı? CE belgesi sahte olabilir mi? Kısa cevap."""
-                        resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", prompt_3, mode=selected_mode)
-                        st.write(resp)
+                    
+                    full_response = ask_gemini(active_api_key, "Motosiklet Güvenlik Konseyi", council_prompt, mode=selected_mode)
+                    
+                    # Cevabı parçala ve dağıt
+                    try:
+                        parts = full_response.split('[')
+                        p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+                        
+                        for p in parts:
+                            if p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
+                            elif p.startswith("MEVZUAT]"): p_mevzuat = p.replace("MEVZUAT]", "").strip()
+                            elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
+                            elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
+                        
+                        st.info(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                        
+                        c1, c2, c3 = st.columns(3)
+                        with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
+                        with c2: st.warning(f"🛠️ **Malzeme Mühendisi**\n\n{p_muhendis}")
+                        with c3: st.error(f"🕵️ **Şüpheci Dedektif**\n\n{p_dedektif}")
+                            
+                    except:
+                        st.warning("Format ayrıştırma hatası, ham metin gösteriliyor:")
+                        st.write(full_response)
             else:
                 st.warning("AI Hafıza sorgusu için anahtar gerekli.")
             
@@ -261,64 +272,63 @@ with tab2:
         3. **İç Etiket:** Üzerindeki yazıların okunabildiği etiket fotoğrafı.
         """)
         
-        # Çoklu dosya yükleme aktif (accept_multiple_files=True)
         uploaded_files = st.file_uploader("Fotoğrafları Yükle (Çoklu Seçim Yapabilirsiniz)", 
                                           type=["jpg", "png", "jpeg", "webp"], 
                                           accept_multiple_files=True)
 
         if uploaded_files and st.button("🤖 Konseyi Topla ve Analiz Et"):
-            # Yüklenen tüm dosyaları PIL Image formatına çevirip listeye atıyoruz
             image_list = []
             for file in uploaded_files:
                 image_list.append(Image.open(file))
             
-            # Resimleri ekranda yan yana (veya alt alta) gösterelim
             st.image(image_list, caption=[f"Fotoğraf {i+1}" for i in range(len(image_list))], width=200)
             
             st.divider()
             
-            # --- GÖRSEL KONSEY BAŞKANI ---
-            with st.spinner(f"Konsey Başkanı {len(image_list)} fotoğrafı inceliyor..."):
-                score_prompt_img = """
-                Sen Motosiklet Güvenlik Konseyi Başkanısın.
-                Sana sunulan BU FOTOĞRAFLARIN HEPSİNİ bir bütün olarak analiz et.
+            with st.spinner(f"Konsey Başkanı ve Üyeler {len(image_list)} fotoğrafı TEK OTURUMDA inceliyor..."):
+                council_prompt_img = """
+                Sen Motosiklet Güvenlik Konseyisin. BU FOTOĞRAFLARIN HEPSİNİ bir bütün olarak analiz et.
+                Kendi içinde tutarlı ol.
                 
-                ARADIĞIMIZ KRİTER:
-                1. Etiketlerde 'EN 13594' kodu VEYA 'CE' işareti (Conformité Européenne) var mı?
-                2. Eğer etiket yoksa veya okunmuyorsa: Ürünün kalitesi, dikişleri ve koruma yapısı 'Sertifikalı bir ürün' gibi güven veriyor mu?
+                1. KONSEY BAŞKANI: Genel güven skoru (%0-100) ve tek cümlelik nihai karar.
+                2. MEVZUAT UZMANI: Etiketlerde 'EN 13594' kodu VEYA 'CE' işareti var mı?
+                3. MALZEME MÜHENDİSİ: Ürünün kalitesi, dikişleri ve koruma yapısı 'Sertifikalı bir ürün' gibi güven veriyor mu?
+                4. ŞÜPHECİ DEDEKTİF: Replika (çakma) olma ihtimali var mı?
                 
-                Cevabı SADECE şu formatta ver:
+                Lütfen cevabı TAM OLARAK aşağıdaki formatta ve başlıklarla ver (Başlıkları değiştirme):
+                
+                [BAŞKAN]
                 **Görsel Güvenilirlik Skoru:** %XX
-                **Kısa Karar:** (Tek cümle. 'EN 13594 veya CE belgesi görüldü/görülmedi, ürün uygun/uygun değil' şeklinde)
+                **Kısa Karar:** ...
+                
+                [MEVZUAT]
+                ...
+                
+                [MÜHENDİS]
+                ...
+                
+                [DEDEKTİF]
+                ...
                 """
-                # Listeyi (image_list) fonksiyona gönderiyoruz
-                score_resp_img = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt_img, image_list, mode=selected_mode)
-            
-            st.info(f"📊 **Başkanın Görsel Kararı:**\n\n{score_resp_img}")
-            
-            st.divider()
-            col1, col2, col3 = st.columns(3)
-            
-            # Diğer uzmanlara da aynı resim listesini gönderiyoruz
-            with col1:
-                st.markdown("### 📜 Mevzuatçı")
-                with st.spinner("Etiketler taranıyor..."):
-                    prompt_img_1 = """Fotoğraflardaki etiketlerde EN 13594 kodu VEYA CE logosu var mı? İkisinden biri varsa 'Yasal olarak uygun' de. Yoksa belirt. Kısa cevap."""
-                    resp = ask_gemini(active_api_key, "Gümrük Denetçisi", prompt_img_1, image_list, mode=selected_mode)
-                    st.info(resp)
-            
-            with col2:
-                st.markdown("### 🛠️ Mühendis")
-                with st.spinner("Yapısal analiz..."):
-                    prompt_img_2 = """Tüm fotoğraflara bak. Malzeme (deri/file), avuç içi koruması ve dikişler kaza anında güvenli mi? Profesyonel üretim mi? Kısa teknik özet."""
-                    resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", prompt_img_2, image_list, mode=selected_mode)
-                st.warning(resp)
-            
-            with col3:
-                st.markdown("### 🕵️ Dedektif")
-                with st.spinner("Sahtecilik kontrolü..."):
-                    prompt_img_3 = """Ürün genel duruşuyla orijinal bir markaya benziyor mu yoksa ucuz bir taklit mi? CE işareti sahte (China Export) gibi duruyor mu? Kısa risk analizi."""
-                    resp = ask_gemini(active_api_key, "Sahte Ürün Uzmanı", prompt_img_3, image_list, mode=selected_mode)
-                st.error(resp)
-            
-            st.success("✅ **Konsey Kararı:** Fotoğraflar bir bütün olarak değerlendirildi.")
+                full_resp_img = ask_gemini(active_api_key, "Motosiklet Güvenlik Konseyi", council_prompt_img, image_list, mode=selected_mode)
+                
+                try:
+                    parts = full_resp_img.split('[')
+                    p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+                    
+                    for p in parts:
+                        if p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
+                        elif p.startswith("MEVZUAT]"): p_mevzuat = p.replace("MEVZUAT]", "").strip()
+                        elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
+                        elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
+                    
+                    st.info(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                    
+                    c1, c2, c3 = st.columns(3)
+                    with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
+                    with c2: st.warning(f"🛠️ **Malzeme Mühendisi**\n\n{p_muhendis}")
+                    with c3: st.error(f"🕵️ **Şüpheci Dedektif**\n\n{p_dedektif}")
+                        
+                except:
+                    st.warning("Format hatası, ham metin:")
+                    st.write(full_resp_img)
