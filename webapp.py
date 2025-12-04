@@ -29,6 +29,10 @@ def create_google_link(query):
     encoded_query = urllib.parse.quote(query)
     return f"https://www.google.com/search?q={encoded_query}"
 
+def create_google_images_link(query):
+    encoded_query = urllib.parse.quote(query)
+    return f"https://www.google.com/search?tbm=isch&q={encoded_query}"
+
 @st.cache_data(show_spinner=False)
 def search_ddg(query, max_res=3):
     backends = ['api', 'html', 'lite'] 
@@ -141,7 +145,8 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 st.title(f"⚖️ Eldiven Dedektifi: {ai_mode.split('(')[0]}")
 st.markdown("""
-**Lens Özelliği:** Fotoğrafını yüklediğiniz ürünün markasını ve modelini yapay zeka **otomatik tanır**, internette sertifikasını arar ve size rapor sunar.
+**Sertifika Kriteri:** Bu araç, eldivenlerde **EN 13594 Sertifikası** VEYA **CE Belgesi (Uygunluk İşareti)** arar. 
+İkisinden biri varsa ürün güvenlik açısından **uygun** kabul edilir.
 """)
 
 tab1, tab2 = st.tabs(["🔍 İnternet Taraması", "📷 Lens Modu (Fotoğraftan Tanı & Bul)"])
@@ -210,6 +215,7 @@ with tab1:
                             elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
                             elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
                         
+                        score_color = "red"
                         if "%0" in p_baskan or " 0" in p_baskan:
                             st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
                         else:
@@ -261,13 +267,13 @@ with tab1:
             status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
 
 # =============================================================================
-# TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> ARA -> ANALİZ ET)
+# TAB 2: FOTOĞRAF ANALİZİ (GÖRSEL TANIMA & ÇOKLU FOTOĞRAF)
 # =============================================================================
 with tab2:
     if not active_api_key:
         st.warning("⚠️ Konsey Modu için API Anahtarı şarttır.")
     else:
-        st.success("✅ **Lens Modu Hazır:** Etiket olmasa bile ürünü tanıyıp araştırabilirim.")
+        st.success("✅ **Lens Modu Hazır:** Görsel tarama ile ürünü bulalım.")
         
         st.info("""
         📸 **ÖNERİLEN FOTOĞRAFLAR (En az 3 adet yüklemeniz önerilir):**
@@ -280,107 +286,152 @@ with tab2:
                                           type=["jpg", "png", "jpeg", "webp"], 
                                           accept_multiple_files=True)
 
-        if uploaded_files and st.button("🤖 Lens İle Tara ve Analiz Et"):
-            image_list = []
-            for file in uploaded_files:
-                image_list.append(Image.open(file))
+        if "step" not in st.session_state: st.session_state.step = 1
+        if "ai_guess" not in st.session_state: st.session_state.ai_guess = ""
+
+        # -------------------------------------------
+        # ADIM 1: TANI VE EŞLEŞTİR
+        # -------------------------------------------
+        if uploaded_files and st.session_state.step == 1:
+            st.image([Image.open(f) for f in uploaded_files], width=150, caption="Yüklenen Görseller")
             
-            st.image(image_list, caption=[f"Fotoğraf {i+1}" for i in range(len(image_list))], width=150)
-            
+            if st.button("🔍 Görsel Eşleştirme ve Tanımlama Yap"):
+                image_list = [Image.open(f) for f in uploaded_files]
+                
+                with st.spinner("Görsel taranıyor, marka/model tespiti yapılıyor..."):
+                    identify_prompt = """
+                    Sen bir GÖRSEL ARAMA MOTORUSUN.
+                    Bu fotoğraflardaki motosiklet eldivenini veritabanındaki görsellerle piksel piksel eşleştir.
+                    
+                    GÖREVLER:
+                    1. Logoları oku (OCR).
+                    2. Tasarım desenini analiz et.
+                    3. Bu ürünün TAM MARKA ve MODELİNİ bul.
+                    
+                    Cevabı SADECE marka ve model ismi olarak ver.
+                    Örn: 'Revit Sand 4' veya 'Scoyco MC29'
+                    Eğer marka yoksa 'Markasız Çin Malı' yaz.
+                    """
+                    prediction = ask_gemini(active_api_key, "Görsel Arama Motoru", identify_prompt, image_list, mode="flash").strip()
+                    
+                    st.session_state.ai_guess = prediction.replace("Marka ve Model:", "").strip()
+                    st.session_state.step = 2
+                    st.rerun()
+
+        # -------------------------------------------
+        # ADIM 2: DOĞRULA VE ANALİZ ET
+        # -------------------------------------------
+        if st.session_state.step == 2:
             st.divider()
             
-            # --- 1. ADIM: GÖRSEL TANIMA (LENS) ---
-            identified_product_name = "Bilinmeyen Ürün"
+            # GÖRSEL DOĞRULAMA KISMI
+            col_ver1, col_ver2 = st.columns([2, 1])
             
-            with st.status("🔍 **Adım 1:** Görselden ürün kimliği tespit ediliyor...", expanded=True) as status_lens:
-                identify_prompt = """
-                Bu fotoğraftaki motosiklet eldiveninin MARKA ve MODELİNİ tespit et.
-                Logolara, tasarım çizgilerine ve koruma şekillerine bak.
+            with col_ver1:
+                st.subheader("🕵️ Görsel Tanıma Sonucu")
+                st.info(f"Yapay zeka bu ürünün **{st.session_state.ai_guess}** olduğunu düşünüyor.")
                 
-                Cevabı SADECE şu formatta ver:
-                Marka Model
-                (Örnek: Revit Sand 4 veya Scoyco MC29)
-                Eğer emin değilsen 'Bilinmeyen Marka' yaz.
-                """
-                identified_product_name = ask_gemini(active_api_key, "Ürün Tanıma Uzmanı", identify_prompt, image_list, mode="flash").strip()
-                st.info(f"📍 **Tespit Edilen Ürün:** {identified_product_name}")
-                status_lens.update(label="Kimlik Tespiti Tamamlandı", state="complete", expanded=False)
+                # Google Görseller Linki Oluşturma
+                google_img_link = create_google_images_link(st.session_state.ai_guess)
+                st.markdown(f"""
+                <div style="background-color:#e8f5e9;padding:10px;border-radius:10px;border:1px solid #4caf50;">
+                    <h4>👁️ Gözle Kontrol Edin:</h4>
+                    <p>Yapay zekanın bulduğu model ile elinizdeki ürün aynı mı? Aşağıdaki butona basarak Google Görseller'deki fotoğraflarla karşılaştırın.</p>
+                    <a href="{google_img_link}" target="_blank" style="text-decoration:none;">
+                        <button style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;">
+                            🖼️ Google Görseller'de '{st.session_state.ai_guess}' Ara
+                        </button>
+                    </a>
+                </div>
+                """, unsafe_allow_html=True)
 
-            # --- 2. ADIM: ARKA PLAN ARAŞTIRMASI (INTERNET) ---
-            found_evidence = "İnternette ek belge bulunamadı."
-            if "Bilinmeyen" not in identified_product_name:
-                with st.status(f"🌐 **Adım 2:** '{identified_product_name}' için sertifika aranıyor...", expanded=True) as status_search:
-                    # DuckDuckGo'da sertifika ara
-                    cert_query = f"{identified_product_name} EN 13594 certificate pdf"
-                    search_results, _ = search_ddg(cert_query, max_res=3)
-                    
-                    evidence_links = []
-                    if search_results:
-                        for res in search_results:
-                            evidence_links.append(f"- {res.get('title')}: {res.get('href')}")
-                        found_evidence = "\n".join(evidence_links)
-                        st.success(f"✅ İnternette {len(search_results)} adet ilgili sonuç bulundu.")
-                    else:
-                        st.warning("⚠️ İnternette doğrudan bir sertifika belgesi bulunamadı.")
-                    
-                    status_search.update(label="İnternet Taraması Tamamlandı", state="complete", expanded=False)
-
-            # --- 3. ADIM: KONSEY ANALİZİ (GÖRSEL + İNTERNET VERİSİ) ---
-            st.divider()
-            with st.spinner(f"Konsey Başkanı tüm verileri (Görsel + İnternet) birleştiriyor..."):
+            with col_ver2:
+                st.markdown("**Doğru değilse düzeltin:**")
+                confirmed_name = st.text_input("Gerçek Model İsmi:", value=st.session_state.ai_guess)
+            
+            st.write("") # Boşluk
+            
+            # İşlem Butonları
+            c_back, c_go = st.columns([1, 4])
+            if c_back.button("🔙 Geri Dön"):
+                st.session_state.step = 1
+                st.rerun()
                 
-                council_prompt_img = f"""
-                Sen Motosiklet Güvenlik Konseyisin. 
-                
-                DURUM RAPORU:
-                1. Görselden Tespit Edilen Ürün: {identified_product_name}
-                2. İnternet Arama Sonuçları:
-                {found_evidence}
-                
-                GÖREV: Yüklenen fotoğrafları ve yukarıdaki internet bulgularını BİRLEŞTİREREK analiz yap.
-                
-                KRİTİK KURAL (BAŞKAN İÇİN):
-                - Etikette 'EN 13594' veya 'CE' yazıyorsa -> GÜVENİLİR.
-                - Etiket yok AMA internet sonuçlarında bu modelin sertifikalı olduğu kanıtlandıysa -> GÜVENİLİR (Ancak görselin replika olma riskini not düş).
-                - Etiket yok VE internette sertifika kaydı yoksa -> %0 PUAN.
-                
-                Lütfen cevabı TAM OLARAK aşağıdaki formatta ver:
-                
-                [BAŞKAN]
-                **Güvenilirlik Skoru:** %XX
-                **Kısa Karar:** ...
-                
-                [MEVZUAT]
-                ...
-                
-                [MÜHENDİS]
-                ...
-                
-                [DEDEKTİF]
-                ...
-                """
-                full_resp_img = ask_gemini(active_api_key, "Motosiklet Güvenlik Konseyi", council_prompt_img, image_list, mode=selected_mode)
-                
-                try:
-                    parts = full_resp_img.split('[')
-                    p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
-                    
-                    for p in parts:
-                        if p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
-                        elif p.startswith("MEVZUAT]"): p_mevzuat = p.replace("MEVZUAT]", "").strip()
-                        elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
-                        elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
-                    
-                    if "%0" in p_baskan or " 0" in p_baskan or "Düşük" in p_baskan:
-                        st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
-                    else:
-                        st.success(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
-                    
-                    c1, c2, c3 = st.columns(3)
-                    with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
-                    with c2: st.warning(f"🛠️ **Malzeme Mühendisi**\n\n{p_muhendis}")
-                    with c3: st.error(f"🕵️ **Şüpheci Dedektif**\n\n{p_dedektif}")
+            if c_go.button("🚀 Doğrula ve Sertifika Ara"):
+                # --- İNTERNET ARAŞTIRMASI ---
+                found_evidence = "İnternette ek belge bulunamadı."
+                with st.status(f"🌐 İnternette '{confirmed_name}' sertifikaları aranıyor...", expanded=False) as status_search:
+                    if "Bilinmeyen" not in confirmed_name:
+                        cert_query = f"{confirmed_name} EN 13594 certificate pdf"
+                        search_results, _ = search_ddg(cert_query, max_res=3)
                         
-                except:
-                    st.warning("Format hatası, ham metin:")
-                    st.write(full_resp_img)
+                        evidence_links = []
+                        if search_results:
+                            for res in search_results:
+                                evidence_links.append(f"- {res.get('title')}: {res.get('href')}")
+                            found_evidence = "\n".join(evidence_links)
+                    status_search.update(label="İnternet Taraması Bitti", state="complete")
+
+                # --- KONSEY ANALİZİ ---
+                st.divider()
+                with st.spinner(f"Konsey Başkanı '{confirmed_name}' için görselleri ve belgeleri birleştiriyor..."):
+                    
+                    image_list = [Image.open(f) for f in uploaded_files]
+                    
+                    council_prompt_img = f"""
+                    Sen Motosiklet Güvenlik Konseyisin. 
+                    
+                    ÜRÜN: {confirmed_name} (Kullanıcı tarafından doğrulandı)
+                    
+                    BULGULAR:
+                    1. Görsel Kanıtlar: Yüklenen fotoğraflar.
+                    2. İnternet Arama Sonuçları:
+                    {found_evidence}
+                    
+                    GÖREV: Yüklenen fotoğrafları ve internet bulgularını BİRLEŞTİREREK analiz yap.
+                    
+                    KRİTİK KURAL (BAŞKAN İÇİN):
+                    - Etikette 'EN 13594' veya 'CE' yazıyorsa -> GÜVENİLİR.
+                    - Etiket yok AMA internet sonuçlarında bu modelin sertifikalı olduğu kanıtlandıysa -> GÜVENİLİR (Ancak replika riskini not düş).
+                    - Etiket yok VE internette sertifika kaydı yoksa -> %0 PUAN.
+                    
+                    Lütfen cevabı TAM OLARAK aşağıdaki formatta ver:
+                    
+                    [BAŞKAN]
+                    **Güvenilirlik Skoru:** %XX
+                    **Kısa Karar:** ...
+                    
+                    [MEVZUAT]
+                    ...
+                    
+                    [MÜHENDİS]
+                    ...
+                    
+                    [DEDEKTİF]
+                    ...
+                    """
+                    full_resp_img = ask_gemini(active_api_key, "Motosiklet Güvenlik Konseyi", council_prompt_img, image_list, mode=selected_mode)
+                    
+                    try:
+                        parts = full_resp_img.split('[')
+                        p_baskan, p_mevzuat, p_muhendis, p_dedektif = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+                        
+                        for p in parts:
+                            if p.startswith("BAŞKAN]"): p_baskan = p.replace("BAŞKAN]", "").strip()
+                            elif p.startswith("MEVZUAT]"): p_mevzuat = p.replace("MEVZUAT]", "").strip()
+                            elif p.startswith("MÜHENDİS]"): p_muhendis = p.replace("MÜHENDİS]", "").strip()
+                            elif p.startswith("DEDEKTİF]"): p_dedektif = p.replace("DEDEKTİF]", "").strip()
+                        
+                        if "%0" in p_baskan or " 0" in p_baskan or "Düşük" in p_baskan:
+                            st.error(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                        else:
+                            st.success(f"📊 **Konsey Ortak Kararı:**\n\n{p_baskan}")
+                        
+                        c1, c2, c3 = st.columns(3)
+                        with c1: st.info(f"📜 **Mevzuat Uzmanı**\n\n{p_mevzuat}")
+                        with c2: st.warning(f"🛠️ **Malzeme Mühendisi**\n\n{p_muhendis}")
+                        with c3: st.error(f"🕵️ **Şüpheci Dedektif**\n\n{p_dedektif}")
+                            
+                    except:
+                        st.warning("Format hatası, ham metin:")
+                        st.write(full_resp_img)
