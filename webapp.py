@@ -12,7 +12,7 @@ import random
 st.set_page_config(page_title="Eldiven Dedektifi (Thinking AI)", page_icon="🏍️", layout="wide")
 
 # 1. Varsayılan Gemini Anahtarı (Kod içinde gömülü - Test için)
-default_gemini_key = "AIzaSyD-HpfQU8NwKM9PmzucKbNtVXoYwccIBUQ"
+default_gemini_key = "ApiKeyBuradaYerAlacak"
 
 # 2. Secrets Kontrolü (Sunucu ortamı için)
 api_key_from_secrets = None
@@ -56,7 +56,6 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         genai.configure(api_key=api_key)
         
         # 1. ADIM: Mevcut Modelleri Listele
-        # Ezbere isim denemek yerine, hesabın erişebildiği modelleri çekiyoruz.
         available_models = []
         try:
             for m in genai.list_models():
@@ -68,7 +67,6 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
         # 2. ADIM: İstenen Moda Göre En İyi Modeli Seç
         target_model = None
         
-        # Önceliklendirme fonksiyonu: Listeden anahtar kelimeye uygun ilk modeli döner
         def find_best_match(keywords):
             for m in available_models:
                 for k in keywords:
@@ -77,16 +75,12 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
             return None
 
         if mode == "thinking":
-            # Düşünme modu için öncelik: Thinking > Pro
             target_model = find_best_match(['thinking', 'pro', '1.5'])
-            # GÜNCELLEME: Prompt artık kısa ve öz cevap istiyor
-            system_instruction = f"Sen '{persona}' rolünde, derinlemesine analiz yapan ancak sonucunu çok KISA, NET ve ÖZET maddeler halinde sunan bir uzmansın. Laf kalabalığı yapma, sadece kritik tespitleri yaz."
+            system_instruction = f"Sen '{persona}' rolünde, adım adım düşünen (Chain of Thought) ve detaylı analiz yapan bir uzmansın. Cevap vermeden önce tüm olasılıkları değerlendir."
         else:
-            # Hızlı mod için öncelik: Flash > 1.5 > Pro
             target_model = find_best_match(['flash', '1.5', 'pro'])
             system_instruction = f"Sen '{persona}' rolünde hızlı ve net cevap veren bir asistansın."
 
-        # Eğer hala model bulamadıysa, listedeki herhangi birini al (Son çare)
         if not target_model and available_models:
             target_model = available_models[0]
             
@@ -95,14 +89,12 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
 
         # 3. ADIM: Seçilen Model ile Üret
         try:
-            # Eski 'gemini-pro' (vision olmayan) modele resim atılırsa hata verir.
-            # Eğer seçilen model 'vision' desteklemiyorsa ve resim varsa, uygun olanı ara.
+            # Resim varsa ve model desteklemiyorsa vision model bul
             if image:
                 is_modern_multimodal = '1.5' in target_model or '2.0' in target_model
                 is_legacy_vision = 'vision' in target_model
                 
                 if not (is_modern_multimodal or is_legacy_vision):
-                     # Eğer elimizdeki model resim desteklemiyorsa, destekleyen bir tane bul
                      vision_model = find_best_match(['vision', '1.5', 'flash'])
                      if vision_model:
                          target_model = vision_model
@@ -111,7 +103,6 @@ def ask_gemini(api_key, persona, prompt, image=None, mode="flash"):
             
             full_prompt = f"{system_instruction}\n\nANALİZ EDİLECEK DURUM: {prompt}\n\nLütfen Türkçe cevap ver."
             
-            # Güvenlik ayarlarını gevşet (Teknik analiz engellenmesin)
             safety_settings = [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -158,7 +149,6 @@ with st.sidebar:
         active_api_key = api_key_from_secrets
     else:
         st.warning("⚠️ AI Analizi için Anahtar Gerekli")
-        # Varsayılan olarak gömülü anahtarı önerelim ama kullanıcının değiştirmesine izin verelim
         user_key = st.text_input("Google API Key", value=default_gemini_key, type="password")
         
         if user_key:
@@ -223,7 +213,6 @@ with tab1:
                 with c1:
                     st.info("📜 **Mevzuat Uzmanı**")
                     with st.spinner("Yasal kayıtlar taranıyor..."):
-                        # Üç tırnak kullanarak string hatasını önledik
                         prompt_1 = f"""'{brand} {model}' eldiveni yasal olarak EN 13594 sertifikasına sahip bilinen bir model mi? Kesin kanıt var mı? Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Sertifikasyon Denetçisi", prompt_1, mode=selected_mode)
                         st.write(resp)
@@ -231,7 +220,6 @@ with tab1:
                 with c2:
                     st.warning("🛠️ **Malzeme Mühendisi**")
                     with st.spinner("Yapısal analiz yapılıyor..."):
-                        # Üç tırnak kullanımı
                         prompt_2 = f"""'{brand} {model}' eldiveninin malzeme kalitesi ve koruma yapısı (yumruk, avuç içi) teknik olarak yeterli biliniyor mu? Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Tekstil Mühendisi", prompt_2, mode=selected_mode)
                         st.write(resp)
@@ -239,7 +227,6 @@ with tab1:
                 with c3:
                     st.error("🕵️ **Şüpheci Dedektif**")
                     with st.spinner("Risk analizi yapılıyor..."):
-                        # Üç tırnak kullanımı
                         prompt_3 = f"""'{brand} {model}' hakkında 'çabuk yırtıldı', 'sahte sertifika' gibi şikayetler veya şaibeler var mı? Dürüst ve eleştirel ol. Kısa cevap ver."""
                         resp = ask_gemini(active_api_key, "Şüpheci Tüketici Hakları Uzmanı", prompt_3, mode=selected_mode)
                         st.write(resp)
@@ -263,15 +250,20 @@ with tab1:
                 st.warning("⚠️ Otomatik PDF bulunamadı.")
                 st.link_button("👉 Manuel PDF Ara", create_google_link(auto_query))
 
-            # 2. Forumlar
+            # 2. Forumlar (GÜNCELLENDİ: Daha geniş arama)
             st.write("---")
-            st.markdown("### 2. 🗣️ Kullanıcı Yorumları")
-            forum_query = f'site:motosiklet.net OR site:technopat.net OR site:facebook.com "{full_name}" koruma'
-            results_forum, _ = search_ddg(forum_query, max_res=3)
+            st.markdown("### 2. 🗣️ Kullanıcı Yorumları ve Forumlar")
+            # Eski dar arama yerine genel arama yapıyoruz
+            forum_query = f'{full_name} motosiklet eldiveni yorum şikayet forum'
+            results_forum, _ = search_ddg(forum_query, max_res=4)
             
             if results_forum:
                 for res in results_forum:
-                    st.info(f"🗨️ **Konu:** [{res.get('title')}]({res.get('href')})")
+                    # Başlık veya linkte 'forum', 'şikayet', 'yorum' geçiyorsa göster
+                    if any(x in res.get('href', '') for x in ['forum', 'sikayet', 'eksi', 'donanimhaber', 'technopat', 'reddit']):
+                        st.info(f"🗨️ **Tartışma Bulundu:** [{res.get('title')}]({res.get('href')})")
+                    else:
+                        st.caption(f"Genel Sonuç: [{res.get('title')}]({res.get('href')})")
             else:
                 st.caption("Forum tartışması bulunamadı.")
 
@@ -290,13 +282,32 @@ with tab2:
         if uploaded_file and st.button("🤖 Konseyi Topla ve Analiz Et"):
             img = Image.open(uploaded_file)
             
+            # --- GÖRSEL KONSEY BAŞKANI (YENİ EKLENDİ) ---
+            st.divider()
+            with st.spinner("Konsey Başkanı görseli inceliyor ve güvenilirlik puanını hesaplıyor..."):
+                score_prompt_img = """
+                Sen Motosiklet Güvenlik Konseyi Başkanısın.
+                Bu görseli analiz et.
+                
+                1. Etiket varsa: EN 13594 kodu, CE işareti, Motosikletli Adam ikonu var mı? Gerçekçi duruyor mu?
+                2. Etiket yoksa: Ürünün dikiş kalitesi, malzeme yapısı (deri/kumaş) ve koruma parçaları profesyonel duruyor mu?
+                
+                Tüm görsel kanıtlara dayanerek bir GÜVEN SKORU ver.
+                
+                Lütfen cevabı tam olarak şu formatta ver:
+                **Görsel Güvenilirlik Skoru:** %XX
+                **Kısa Karar:** Tek cümlelik özet.
+                """
+                score_resp_img = ask_gemini(active_api_key, "Konsey Başkanı", score_prompt_img, img, mode=selected_mode)
+            
+            st.info(f"📊 **Yapay Zeka Konseyi Görsel Kararı:**\n\n{score_resp_img}")
+            
             st.divider()
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.markdown("### 📜 Mevzuatçı")
                 with st.spinner("Etiket kodları okunuyor..."):
-                    # Üç tırnak kullanımı
                     prompt_img_1 = """Bu etiketteki EN 13594, CE, Level 1/2, KP, CAT II gibi ibareleri kontrol et. Eksik veya sahte duran bir kod var mı? Sadece önemli bulguları özetle."""
                     resp = ask_gemini(active_api_key, "Gümrük Denetçisi", prompt_img_1, img, mode=selected_mode)
                     st.info(resp)
@@ -304,7 +315,6 @@ with tab2:
             with col2:
                 st.markdown("### 🛠️ Mühendis")
                 with st.spinner("Dikiş ve malzeme inceleniyor..."):
-                    # Üç tırnak kullanımı
                     prompt_img_2 = """Fotoğraftaki ürünün dikiş kalitesi, malzeme türü (deri/file) ve koruma parçalarının yerleşimi güvenli mi? Kaza anında dağılır mı? Kısa ve net teknik özet yap."""
                     resp = ask_gemini(active_api_key, "Güvenlik Ekipmanı Mühendisi", prompt_img_2, img, mode=selected_mode)
                 st.warning(resp)
@@ -312,7 +322,6 @@ with tab2:
             with col3:
                 st.markdown("### 🕵️ Dedektif")
                 with st.spinner("Piyasa araştırması..."):
-                    # Üç tırnak kullanımı
                     prompt_img_3 = """Bu etiketin yazı tipi, baskı kalitesi veya duruşunda 'replika' veya 'ucuz Çin malı' hissi veren bir detay var mı? Güvenmeli miyiz? Kısa risk analizi yap."""
                     resp = ask_gemini(active_api_key, "Sahte Ürün Uzmanı", prompt_img_3, img, mode=selected_mode)
                 st.error(resp)
