@@ -47,29 +47,54 @@ def search_ddg(query, max_res=3):
 
 def multi_search_product(product_name):
     """
-    Ürün için 3 farklı koldan arama yapar ve sonuçları birleştirir.
-    Böylece PDF yoksa bile inceleme veya resmi site verisi yakalanır.
+    Ürün için çok kapsamlı (360 derece) bir arama yapar.
+    PDF, Resmi Site, Forumlar, Kullanıcı Yorumları ve Satıcı Verilerini tarar.
     """
     search_strategies = [
-        f"{product_name} EN 13594 certificate filetype:pdf",  # 1. Resmi Belge (PDF)
-        f"{product_name} motorcycle glove review CE rating",   # 2. İncelemeler ve Puanlar
-        f'site:motocap.com.au "{product_name}"',              # 3. MotoCAP Testi
-        f"{product_name} official site specifications"         # 4. Resmi Site Özellikleri
+        # 1. Resmi Belgeler (En Güçlü Kanıt)
+        f"{product_name} EN 13594 certificate filetype:pdf",
+        f"{product_name} Declaration of Conformity CE",
+        
+        # 2. Satıcı ve Teknik Veriler (Özellik Teyidi)
+        f"{product_name} motorcycle glove specifications protection level",
+        f"{product_name} material safety features",
+        
+        # 3. Gerçek Kullanıcı Deneyimi (Forum & Reddit)
+        f"{product_name} crash test forum",
+        f"{product_name} safety review reddit",
+        
+        # 4. Genel İncelemeler ve Testler
+        f"{product_name} review motorrad handschuhe test", # Avrupa testleri
+        f'site:motocap.com.au "{product_name}"'
     ]
     
     combined_results = []
     seen_links = set()
     
-    for query in search_strategies:
+    # Kullanıcıya işlem yapıldığını göstermek için progress bar
+    progress_bar = st.progress(0, text="Detaylı internet taraması başlatılıyor...")
+    
+    for i, query in enumerate(search_strategies):
+        # Her sorgu için 2 sonuç al, toplamda 10-15 sonuç eder
         results, _ = search_ddg(query, max_res=2)
+        
         if results:
             for res in results:
                 link = res.get('href', '')
+                title = res.get('title', '')
+                body = res.get('body', '')
+                
                 if link not in seen_links:
                     seen_links.add(link)
-                    combined_results.append(f"- [{res.get('title')}]({link}): {res.get('body')}")
-                    
-    return "\n".join(combined_results) if combined_results else "İnternet taramasında spesifik veri bulunamadı."
+                    # Kaynağın ne olduğunu anlamak için detaylı ekle
+                    combined_results.append(f"- **Başlık:** {title}\n  **Link:** {link}\n  **Özet:** {body}\n")
+        
+        # İlerleme çubuğunu güncelle
+        progress_bar.progress((i + 1) / len(search_strategies), text=f"Taranıyor: {query}")
+        
+    progress_bar.empty() # İş bitince çubuğu temizle
+    
+    return "\n".join(combined_results) if combined_results else "Kapsamlı taramada anlamlı veri bulunamadı."
 
 # --- GELİŞMİŞ GOOGLE GEMINI FONKSİYONU ---
 def ask_gemini(api_key, persona, prompt, images=None, mode="flash"):
@@ -207,7 +232,7 @@ with tab1:
                     council_prompt = f"""
                     Sen Motosiklet Güvenlik Konseyisin. Ürün: '{brand} {model}'
                     
-                    ELİMİZDEKİ İNTERNET VERİLERİ:
+                    ELİMİZDEKİ İNTERNET VERİLERİ (PDF, Yorumlar, Forumlar, Mağaza Verileri):
                     {found_evidence}
                     
                     Aşağıdaki 4 farklı rolü AYNI ANDA canlandır ve birbirinizle TUTARLI cevaplar verin.
@@ -262,39 +287,10 @@ with tab1:
             else:
                 st.warning("AI Hafıza sorgusu için anahtar gerekli.")
             
-            st.divider()
-            
-            # --- KLASİK ARAMA ---
-            status_container = st.status("🕵️ İnternet Taranıyor...", expanded=True)
-            
-            # 1. PDF Belge
-            st.markdown("### 1. 📄 Resmi Belge (EN 13594 veya CE)")
-            auto_query = f"{brand} {model} certificate EN 13594 OR CE Declaration of Conformity filetype:pdf"
-            results_auto, _ = search_ddg(auto_query, max_res=3)
-            
-            if results_auto:
-                for res in results_auto:
-                    st.success(f"✅ **Belge Bulundu:** [{res.get('title')}]({res.get('href')})")
-            else:
-                st.warning("⚠️ Otomatik PDF bulunamadı.")
-                st.link_button("👉 Manuel PDF Ara", create_google_link(auto_query))
-
-            # 2. Forumlar
-            st.write("---")
-            st.markdown("### 2. 🗣️ Kullanıcı Yorumları")
-            forum_query = f'{full_name} motosiklet eldiveni yorum şikayet forum'
-            results_forum, _ = search_ddg(forum_query, max_res=4)
-            
-            if results_forum:
-                for res in results_forum:
-                    if any(x in res.get('href', '') for x in ['forum', 'sikayet', 'eksi', 'donanimhaber', 'technopat', 'reddit']):
-                        st.info(f"🗨️ **Tartışma:** [{res.get('title')}]({res.get('href')})")
-                    else:
-                        st.caption(f"Sonuç: [{res.get('title')}]({res.get('href')})")
-            else:
-                st.caption("Forum sonucu yok.")
-
-            status_container.update(label="Tarama Tamamlandı", state="complete", expanded=False)
+            # Bulunan linkleri göster
+            if "found_evidence" in locals() and len(found_evidence) > 50:
+                with st.expander("🌍 Bulunan Kaynaklar (Detay)"):
+                    st.markdown(found_evidence)
 
 # =============================================================================
 # TAB 2: FOTOĞRAF ANALİZİ (LENS MODU: TANI -> KONTROL ET -> ANALİZ ET)
@@ -321,9 +317,10 @@ with tab2:
                                           accept_multiple_files=True)
 
         # -------------------------------------------
-        # ADIM 1: TANI VE TAHMİN ET
+        # ADIM 1: TANI VE TAHMİN ET (Sıfırdan Başla)
         # -------------------------------------------
         if uploaded_files and st.session_state.lens_step == 1:
+            # Yeni yüklemede hafızayı temizle
             if st.button("🔍 Görseli Tara ve Model Tahmini Yap"):
                 st.session_state.rejected_guesses = [] # Sıfırla
                 image_list = [Image.open(f) for f in uploaded_files]
@@ -434,7 +431,7 @@ with tab2:
                     
                     BULGULAR:
                     1. Görsel Kanıtlar: Yüklenen fotoğraflar.
-                    2. İnternet Arama Sonuçları (Resmi Sertifikalar):
+                    2. İnternet Arama Sonuçları (Resmi Sertifikalar, Yorumlar, Testler):
                     {found_evidence}
                     
                     GÖREV: Yüklenen fotoğrafları ve internet bulgularını KARŞILAŞTIRARAK (Cross-Check) analiz yap.
